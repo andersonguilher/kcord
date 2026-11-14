@@ -56,3 +56,26 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm run test:ui
+
+  ui-livekit:
+    # The same real-browser scenarios with the voice room on a LiveKit server (dev mode, host network).
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Start LiveKit
+        run: |
+          docker run -d --name livekit --network host livekit/livekit-server:v1.13.11 --dev --bind 127.0.0.1
+          for i in $(seq 1 30); do curl -fs http://127.0.0.1:7880 >/dev/null && exit 0; sleep 1; done
+          docker logs livekit; exit 1
+      - run: npm run test:ui
+        env:
+          KCORD_UI_LIVEKIT: "1"
+      - if: failure()
+        run: docker logs livekit | tail -50

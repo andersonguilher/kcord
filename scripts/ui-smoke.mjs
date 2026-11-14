@@ -42,12 +42,20 @@ writeFileSync(join(work, "data", "community.json"), JSON.stringify({
   voiceChannels: [{ id: "cafe", name: "Café aberto", categoryId: null, position: 0 }],
 }));
 
+// With KCORD_UI_LIVEKIT=1 the voice room runs on LiveKit instead of the peer-to-peer mesh.
+// It expects a LiveKit server in dev mode already listening on 127.0.0.1:7880
+// (key "devkey", secret "secret"); CI starts one as a container.
+const useLiveKit = process.env.KCORD_UI_LIVEKIT === "1";
+const liveKitEnv = useLiveKit
+  ? { LIVEKIT_URL: "ws://127.0.0.1:7880", LIVEKIT_API_KEY: "devkey", LIVEKIT_API_SECRET: "secret", LIVEKIT_VOICE_CHANNEL_IDS: "cafe" }
+  : {};
 const server = spawn(process.execPath, [join(repo, "node_modules/tsx/dist/cli.mjs"), join(repo, "server/index.ts")], {
   cwd: work,
   env: {
     ...process.env, PORT: String(port), HOST: "127.0.0.1", SESSION_SECRET: secret,
     DISCORD_CLIENT_ID: "x", DISCORD_CLIENT_SECRET: "x", DISCORD_BOT_TOKEN: "x",
     DISCORD_REDIRECT_URI: `${url}/auth/discord/callback`, KAFCORD_OWNER_DISCORD_ID: ownerDiscordId,
+    ...liveKitEnv,
   },
   stdio: ["ignore", "pipe", "pipe"],
 });
@@ -114,7 +122,7 @@ async function openAs(sessionId, label) {
 }
 const storage = (page, key) => page.evaluate((k) => localStorage.getItem(k), key);
 
-console.log(`UI smoke test against ${url}`);
+console.log(`UI smoke test against ${url}${useLiveKit ? " (voice on LiveKit)" : ""}`);
 let ana;
 let bia;
 try {
@@ -249,6 +257,10 @@ try {
     // A remote audio element only exists once the peer connection delivered a track.
     await ana.waitForFunction(() => document.querySelectorAll("audio").length > 0, null, { timeout: 20_000 });
     await bia.waitForFunction(() => document.querySelectorAll("audio").length > 0, null, { timeout: 20_000 });
+    if (useLiveKit) {
+      const rtc = await (await fetch(`${url}/api/rtc-config`)).json();
+      if (!JSON.stringify(rtc.livekitChannelIds ?? []).includes("cafe")) throw new Error("the server did not list the channel as LiveKit");
+    }
   });
 
   // A video element with real dimensions means frames actually arrived over WebRTC.
