@@ -468,6 +468,7 @@ export function useScreenShare(options: ScreenShareOptions) {
     screenResolutionHeight,
     screenLabel,
     screenRef,
+    screenEncodingRef,
     latestScreenThumbnailRef,
     screenResolutionRef,
     showDesktopShareDialog,

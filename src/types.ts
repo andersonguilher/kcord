@@ -199,7 +199,8 @@ export type ScreenPreview = Omit<ScreenAnnouncement, "peerId"> & { live: boolean
 
 export type SinkAudioElement = HTMLAudioElement & { setSinkId?: (deviceId: string) => Promise<void> };
 
-export type RtcConfigResponse = { iceServers?: RTCIceServer[]; iceTransportPolicy?: RTCIceTransportPolicy };
+/** `livekitChannelIds` lists the voice channels served by LiveKit instead of the peer-to-peer mesh (`"*"` means all). */
+export type RtcConfigResponse = { iceServers?: RTCIceServer[]; iceTransportPolicy?: RTCIceTransportPolicy; livekitChannelIds?: string[] | "*" };
 
 export type BrowserCaptureController = { setFocusBehavior: (behavior: "no-focus-change") => void };
 

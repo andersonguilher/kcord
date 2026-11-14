@@ -40,6 +40,8 @@ export function useMicrophone(options: MicrophoneOptions) {
   const [voiceDetected, setVoiceDetected] = useState(false);
   /** Bumped when the capture was replaced, so the track enabled state is applied again. */
   const [micPipelineVersion, setMicPipelineVersion] = useState(0);
+  /** Changes whenever a capture is installed, so a transport that publishes the track can swap it. */
+  const [microphoneVersion, setMicrophoneVersion] = useState(0);
   const localAudioRef = useRef<MediaStream | null>(null);
   const rawAudioRef = useRef<MediaStream | null>(null);
   const inputAudioContextRef = useRef<AudioContext | null>(null);
@@ -79,6 +81,7 @@ export function useMicrophone(options: MicrophoneOptions) {
     inputAudioContextRef.current = pipeline.context;
     inputGainRef.current = pipeline.gain;
     inputAnalyserRef.current = pipeline.analyser;
+    setMicrophoneVersion((version) => version + 1);
   };
 
   useEffect(() => {
@@ -189,6 +192,7 @@ export function useMicrophone(options: MicrophoneOptions) {
 
   return {
     voiceDetected,
+    microphoneVersion,
     localAudioRef,
     rawAudioRef,
     inputAudioContextRef,

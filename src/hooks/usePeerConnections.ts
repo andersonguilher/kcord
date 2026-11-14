@@ -45,6 +45,8 @@ export function usePeerConnections(options: PeerConnectionOptions) {
   const pendingIceCandidatesRef = useRef(new Map<string, RTCIceCandidateInit[]>());
   const rtcConfigurationRef = useRef<RTCConfiguration>(fallbackRtcConfiguration);
   const rtcConfigurationPromiseRef = useRef<Promise<RTCConfiguration> | null>(null);
+  /** Voice channels the server serves through LiveKit; every other channel uses this peer-to-peer mesh. */
+  const livekitChannelIdsRef = useRef<string[] | "*">([]);
   /** What the sender said each incoming video track is (camera or screen), by `peerId:trackId`. */
   const remoteTrackKindsRef = useRef(new Map<string, RemoteTrackKind>());
 
@@ -176,6 +178,7 @@ export function usePeerConnections(options: PeerConnectionOptions) {
             iceCandidatePoolSize: 8,
           };
           rtcConfigurationRef.current = configuration;
+          livekitChannelIdsRef.current = result.livekitChannelIds ?? [];
           return configuration;
         })
         .catch(() => fallbackRtcConfiguration);
@@ -184,6 +187,12 @@ export function usePeerConnections(options: PeerConnectionOptions) {
   }, []);
 
   useEffect(() => { void loadRtcConfiguration(); }, [loadRtcConfiguration]);
+
+  /** True when the server serves this voice channel through LiveKit. Known once the configuration has loaded. */
+  const isLiveKitChannel = useCallback((channelId: string) => {
+    const channels = livekitChannelIdsRef.current;
+    return channels === "*" || channels.includes(channelId);
+  }, []);
 
   // ---- socket events ----
 
@@ -236,6 +245,7 @@ export function usePeerConnections(options: PeerConnectionOptions) {
     remoteCameraStreams,
     remoteScreenStreams,
     loadRtcConfiguration,
+    isLiveKitChannel,
     createPeer,
     closePeer,
     makeOffer,

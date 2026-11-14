@@ -9,6 +9,10 @@ export type ScreenViewingOptions = {
   voiceChannel: string | null;
   /** Stops showing someone's shared screen stream; provided by the peer layer, which is created later. */
   dropRemoteScreenStream: (peerId: string) => void;
+  /** The person chose to watch this screen. A transport that sends screens on demand starts receiving it. */
+  onScreenWatched?: (peerId: string) => void;
+  /** The person stopped watching this screen, or it ended. */
+  onScreenUnwatched?: (peerId: string) => void;
 };
 
 /**
@@ -75,6 +79,7 @@ export function useScreenViewing(options: ScreenViewingOptions) {
         ? { ...previews, [activeScreenPeerId]: { ...previews[activeScreenPeerId], live: false } }
         : previews);
       dropRemoteScreenStream(activeScreenPeerId);
+      optionsRef.current.onScreenUnwatched?.(activeScreenPeerId);
     }
     setScreenPreviews((previews) => previews[peerId]
       ? { ...previews, [peerId]: { ...previews[peerId], live: false } }
@@ -84,6 +89,7 @@ export function useScreenViewing(options: ScreenViewingOptions) {
     watchedScreenDiscordUserIdRef.current = current.find((member) => member.socketId === peerId)?.discordUserId ?? null;
     setActiveScreenPeerId(peerId);
     socket.current?.emit("screen:subscribe", { target: peerId });
+    optionsRef.current.onScreenWatched?.(peerId);
   };
 
   // Remembers the choice: the next live watched opens the same way.
@@ -106,6 +112,7 @@ export function useScreenViewing(options: ScreenViewingOptions) {
         ? { ...previews, [activeScreenPeerId]: { ...previews[activeScreenPeerId], live: false } }
         : previews);
       dropRemoteScreenStream(activeScreenPeerId);
+      optionsRef.current.onScreenUnwatched?.(activeScreenPeerId);
     }
     activeScreenPeerIdRef.current = null;
     watchedScreenDiscordUserIdRef.current = null;
@@ -125,6 +132,7 @@ export function useScreenViewing(options: ScreenViewingOptions) {
     activeScreenPeerIdRef.current = restored.peerId;
     setActiveScreenPeerId(restored.peerId);
     optionsRef.current.socketRef.current?.emit("screen:subscribe", { target: restored.peerId });
+    optionsRef.current.onScreenWatched?.(restored.peerId);
   }, []);
 
   /** The full list of live screens in the room. */
@@ -163,6 +171,7 @@ export function useScreenViewing(options: ScreenViewingOptions) {
       return next;
     });
     optionsRef.current.dropRemoteScreenStream(peerId);
+    optionsRef.current.onScreenUnwatched?.(peerId);
     setActiveScreenPeerId((current) => current === peerId ? null : current);
     setExpandedScreenPeerId((current) => current === peerId ? null : current);
     if (activeScreenPeerIdRef.current === peerId) {

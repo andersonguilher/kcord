@@ -1,6 +1,6 @@
 # Replacing the peer-to-peer mesh with LiveKit
 
-Status: server side done, tested and deployed (running, unused); client side in progress.
+Status: server side deployed (running, unused); client transport implemented and unit-tested (`src/hooks/useLiveKitRoom.ts`), not yet verified against a real LiveKit server.
 Nothing is enabled by default, so every voice channel still uses the mesh.
 
 ## Why

@@ -16,6 +16,7 @@ import { useScreenViewing } from "./hooks/useScreenViewing";
 import { useChat } from "./hooks/useChat";
 import { useDesktopUpdate } from "./hooks/useDesktopUpdate";
 import { useInterfaceCue } from "./hooks/useInterfaceCue";
+import { useLiveKitRoom } from "./hooks/useLiveKitRoom";
 import { useMicrophone } from "./hooks/useMicrophone";
 import { usePeerConnections } from "./hooks/usePeerConnections";
 import { usePushToTalk } from "./hooks/usePushToTalk";
@@ -323,6 +324,7 @@ export default function App() {
   });
   const {
     voiceDetected,
+    microphoneVersion,
     localAudioRef,
     rawAudioRef,
     inputAudioContextRef,
@@ -371,12 +373,15 @@ export default function App() {
     voiceChannel,
     // The peer layer is created just below, so this reaches it once everything is set up.
     dropRemoteScreenStream: (peerId) => dropRemoteScreenStream(peerId),
+    onScreenWatched: (peerId) => subscribeScreen(peerId),
+    onScreenUnwatched: (peerId) => unsubscribeScreen(peerId),
   });
   const {
-    remoteStreams,
-    remoteCameraStreams,
-    remoteScreenStreams,
+    remoteStreams: meshRemoteStreams,
+    remoteCameraStreams: meshRemoteCameraStreams,
+    remoteScreenStreams: meshRemoteScreenStreams,
     loadRtcConfiguration,
+    isLiveKitChannel,
     createPeer,
     closePeer,
     makeOffer,
@@ -414,6 +419,7 @@ export default function App() {
     screenResolutionHeight,
     screenLabel,
     screenRef,
+    screenEncodingRef,
     latestScreenThumbnailRef,
     screenResolutionRef,
     showDesktopShareDialog,
@@ -457,6 +463,32 @@ export default function App() {
     isBlockedInAfk: () => blockedInAfkChannel(),
     setNotice,
   });
+  const {
+    remoteStreams: liveKitRemoteStreams,
+    remoteCameraStreams: liveKitRemoteCameraStreams,
+    remoteScreenStreams: liveKitRemoteScreenStreams,
+    liveKitActiveRef,
+    joinLiveKit,
+    leaveLiveKit,
+    subscribeScreen,
+    unsubscribeScreen,
+  } = useLiveKitRoom({
+    socketRef,
+    localAudioRef,
+    microphoneVersion,
+    cameraStream,
+    screenStream,
+    screenEncodingRef,
+    setScreenPreviews,
+    onDisconnected: () => {
+      setNotice("A conexão de voz foi interrompida.");
+      leaveVoiceRef.current();
+    },
+  });
+  // A room uses one backend, so at most one of the two sets has anything in it.
+  const remoteStreams = useMemo(() => ({ ...meshRemoteStreams, ...liveKitRemoteStreams }), [meshRemoteStreams, liveKitRemoteStreams]);
+  const remoteCameraStreams = useMemo(() => ({ ...meshRemoteCameraStreams, ...liveKitRemoteCameraStreams }), [meshRemoteCameraStreams, liveKitRemoteCameraStreams]);
+  const remoteScreenStreams = useMemo(() => ({ ...meshRemoteScreenStreams, ...liveKitRemoteScreenStreams }), [meshRemoteScreenStreams, liveKitRemoteScreenStreams]);
   const microphoneLockedByServer = serverMuted || serverDeafened;
   const currentUserId = currentMember?.kafcordUserId ?? (localGuestMode ? null : authState?.user?.kafcordUserId) ?? null;
   const currentAvatarUrl = currentMember?.avatarUrl ?? (localGuestMode ? null : kcordProfile?.avatarUrl ?? authState?.user?.avatarUrl);
@@ -1024,6 +1056,12 @@ export default function App() {
         });
         resumeScreenAnnouncement();
         socket.emit("screen:list:request");
+        if (isLiveKitChannel(resumeChannelId)) {
+          joinLiveKit(resumeChannelId).catch((error: unknown) => {
+            setNotice(error instanceof Error ? error.message : "Não foi possível voltar à sala de voz.");
+            leaveVoiceRef.current();
+          });
+        }
         const channelName = payload.community.voiceChannels.find((channel) => channel.id === resumeChannelId)?.name;
         setNotice(`Reconectado automaticamente a ${channelName ?? "sua sala de voz"}.`);
       } else if (resumeChannelId) {
@@ -1060,13 +1098,13 @@ export default function App() {
     socket.on("dm:message", onDirectMessage);
     socket.on("dm:delete", onDirectDelete);
     socket.on("dm:identity-removed", onDirectIdentityRemoved);
-    socket.on("media:track-meta", onTrackMeta);
+    socket.on("media:track-meta", (meta: Parameters<typeof onTrackMeta>[0]) => { if (!liveKitActiveRef.current) onTrackMeta(meta); });
     socket.on("screen:list", onScreenList);
     socket.on("screen:available", onScreenAvailable);
     socket.on("screen:thumbnail", onScreenThumbnail);
     socket.on("screen:stop", onScreenStop);
-    socket.on("screen:viewer-join", onViewerJoin);
-    socket.on("screen:viewer-left", onViewerLeft);
+    socket.on("screen:viewer-join", (viewer: Parameters<typeof onViewerJoin>[0]) => { if (!liveKitActiveRef.current) onViewerJoin(viewer); });
+    socket.on("screen:viewer-left", (viewer: Parameters<typeof onViewerLeft>[0]) => { if (!liveKitActiveRef.current) onViewerLeft(viewer); });
     socket.on("screen:viewer-count", onViewerCount);
     socket.on("voice:afk", ({ channelId }: { channelId?: string }) => {
       if (typeof channelId !== "string" || !voiceChannelRef.current || voiceChannelRef.current === channelId) return;
@@ -1101,9 +1139,9 @@ export default function App() {
       leaveVoiceRef.current();
       setNotice(`${String(moderatedBy || "Um administrador").slice(0, 32)} desconectou você da sala de voz.`);
     });
-    socket.on("voice:peers", onVoicePeers);
+    socket.on("voice:peers", (peerIds: string[]) => { if (!liveKitActiveRef.current) void onVoicePeers(peerIds); });
     socket.on("voice:member-left", closePeer);
-    socket.on("rtc:signal", onRtcSignal);
+    socket.on("rtc:signal", (signal: Parameters<typeof onRtcSignal>[0]) => { if (!liveKitActiveRef.current) void onRtcSignal(signal); });
 
     return () => {
       socket.disconnect();
@@ -1111,7 +1149,7 @@ export default function App() {
       peersRef.current.forEach((peer) => peer.close());
       peersRef.current.clear();
     };
-  }, [authState?.user?.avatarUrl, closePeer, joined, kcordProfile?.avatarUrl, loadSession, localGuestMode, localGuestProfile, name, normalizeMembers, onChatDelete, onChatMessage, onChatReadState, onChatUpdate, onDirectDelete, onDirectIdentityRemoved, onDirectMessage, onRtcSignal, onScreenAvailable, onScreenList, onScreenStop, onScreenThumbnail, onTrackMeta, onVoicePeers, resetRemoteVoiceConnections]);
+  }, [authState?.user?.avatarUrl, closePeer, isLiveKitChannel, joinLiveKit, joined, kcordProfile?.avatarUrl, liveKitActiveRef, loadSession, localGuestMode, localGuestProfile, name, normalizeMembers, onChatDelete, onChatMessage, onChatReadState, onChatUpdate, onDirectDelete, onDirectIdentityRemoved, onDirectMessage, onRtcSignal, onScreenAvailable, onScreenList, onScreenStop, onScreenThumbnail, onTrackMeta, onVoicePeers, resetRemoteVoiceConnections]);
 
   const openUserContextMenu = (event: ReactMouseEvent<HTMLElement>, member: Member) => {
     if (member.socketId === socketRef.current?.id) return;
@@ -1212,6 +1250,7 @@ export default function App() {
     suppressLeaveCueRef.current = false;
     socketRef.current?.emit("screen:stop");
     socketRef.current?.emit("voice:leave");
+    leaveLiveKit();
     resetRemoteVoiceConnections();
     releaseMicrophone();
     releaseScreenShare();
@@ -1229,7 +1268,7 @@ export default function App() {
     setMainView("text");
     setMobileView("channels");
     if (shouldPlayCue) void playInterfaceCue(disconnectFromChannelSound);
-  }, [playInterfaceCue, releaseCamera, releaseScreenShare, resetRemoteVoiceConnections]);
+  }, [leaveLiveKit, playInterfaceCue, releaseCamera, releaseScreenShare, resetRemoteVoiceConnections]);
   leaveVoiceRef.current = leaveVoice;
 
   const openProfileEditor = () => {
@@ -1369,6 +1408,15 @@ export default function App() {
       leaveVoice();
       await loadRtcConfiguration();
       await startMicrophone(inputDeviceId, micOn && inputMode === "voice");
+      if (isLiveKitChannel(channelId)) {
+        try {
+          await joinLiveKit(channelId);
+        } catch (error) {
+          releaseMicrophone();
+          setNotice(error instanceof Error ? error.message : "Não foi possível entrar na sala de voz.");
+          return;
+        }
+      }
       voiceChannelRef.current = channelId;
       try {
         sessionStorage.setItem("kafcord:voice-channel-id", channelId);
