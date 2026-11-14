@@ -1,0 +1,10 @@
+[Unit]
+Description=Update KCord coturn relay traffic counters every minute
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=60s
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

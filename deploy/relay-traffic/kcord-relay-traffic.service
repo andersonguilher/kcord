@@ -1,0 +1,7 @@
+[Unit]
+Description=Write KCord coturn relay traffic counters
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/kafcord/bin/kcord-relay-traffic.sh

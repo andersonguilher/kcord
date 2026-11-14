@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "remote-main",
+  "description": "Permissões mínimas da janela KCord hospedada no domínio oficial.",
+  "windows": ["main"],
+  "remote": {
+    "urls": [
+      "https://kafcord.kafly.com.br/*",
+      "http://localhost:3001/*"
+    ]
+  },
+  "permissions": ["core:default"]
+}

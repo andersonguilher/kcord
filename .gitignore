@@ -1,0 +1,17 @@
+node_modules/
+dist/
+desktop-dist/
+desktop-web-dist/
+src-tauri/target/
+src-tauri/gen/schemas/
+.electron-builder-cache/
+uploads/
+downloads/
+data/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+Thumbs.db
+native/app-audio/target/

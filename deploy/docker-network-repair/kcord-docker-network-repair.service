@@ -1,0 +1,9 @@
+[Unit]
+Description=Recreate Compose projects whose Docker network lost its NAT rules
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/kafcord/bin/kcord-docker-network-repair.sh --wait 60
+TimeoutStartSec=15min

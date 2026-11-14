@@ -1,0 +1,42 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "KCord Tauri Preview",
+  "version": "0.1.8",
+  "identifier": "br.com.kafly.kcord.tauri-preview",
+  "build": {
+    "frontendDist": "https://kafcord.kafly.com.br"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "KCord Tauri Preview 0.1.8",
+        "url": "https://kafcord.kafly.com.br",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 940,
+        "minHeight": 620,
+        "visible": true,
+        "backgroundColor": "#111214"
+      }
+    ],
+    "security": {
+      "capabilities": ["remote-main"]
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "icon": ["../build/icon-v2.ico"],
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      },
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    }
+  }
+}

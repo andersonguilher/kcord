@@ -1,0 +1,3 @@
+*.sh text eol=lf
+deploy/relay-traffic/* text eol=lf
+deploy/docker-network-repair/* text eol=lf

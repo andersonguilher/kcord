@@ -1,0 +1,9 @@
+**
+!package.json
+!package-lock.json
+!server/
+!server/**
+!dist/
+!dist/**
+!shared/
+!shared/**

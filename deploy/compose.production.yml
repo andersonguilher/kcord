@@ -1,0 +1,41 @@
+services:
+  kafcord:
+    image: kafcord:0.1.20-20261114.59
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: kafcord
+    init: true
+    restart: unless-stopped
+    env_file:
+      - /opt/kafcord/shared/.env
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3201
+      KAFCORD_CHAT_DATABASE_PATH: /app/data/kafcord.sqlite
+      KCORD_DOWNLOADS_DIR: /app/downloads
+    ports:
+      - "127.0.0.1:3201:3201"
+    volumes:
+      - /opt/kafcord/shared/data:/app/data
+      - /opt/kafcord/shared/uploads:/app/uploads
+      - /opt/kafcord/shared/downloads:/app/downloads:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    stop_grace_period: 20s
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:3201/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
