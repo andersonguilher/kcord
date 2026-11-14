@@ -1,0 +1,50 @@
+name: Desktop release
+
+# Builds the Windows installer from this repository's source on a GitHub-hosted
+# runner, so the binary is traceable to the public code. Runs on version tags and
+# on demand. Code signing through SignPath is added as a step after the build
+# once the project is approved (see CODE_SIGNING_POLICY.md).
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows-installer:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # npm skips install scripts, so fetch the Electron binary explicitly.
+      - run: node node_modules/electron/install.js
+      - name: Build the installer (client, native audio helper, Electron package)
+        run: npm run desktop:dist
+      - name: Verify the package contents
+        run: npm run test:desktop-package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kcord-windows-installer
+          if-no-files-found: error
+          path: |
+            desktop-dist/KCord-Setup-*.exe
+            desktop-dist/KCord-Setup-*.exe.blockmap
+            desktop-dist/latest.yml
+      - name: Attach to the GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          prerelease: true
+          generate_release_notes: true
+          files: |
+            desktop-dist/KCord-Setup-*.exe
+            desktop-dist/KCord-Setup-*.exe.blockmap
+            desktop-dist/latest.yml
