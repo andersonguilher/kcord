@@ -15,3 +15,5 @@ data/
 .DS_Store
 Thumbs.db
 native/app-audio/target/
+# Operational notes (servers, releases, backups) stay on the maintainer's machine.
+*.private.md

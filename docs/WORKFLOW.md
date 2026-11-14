@@ -97,7 +97,10 @@ handoff":
 
 1. Complete proportional checks within the authorized work.
 2. Review Git status and relevant diffs when Git exists.
-3. Replace obsolete content in `docs/STATUS.md` with the result, evidence, pending
+3. Replace obsolete content in `docs/STATUS.md` (public: state, evidence, roadmap; never server
+   addresses, backups or credentials). Release directories, image tags, backups and rollback steps go
+   in `docs/OPERATIONS.private.md`, which is git-ignored (`*.private.md`) and stays on the maintainer's
+   machine. Replace obsolete content in `docs/STATUS.md` with the result, evidence, pending
    work, next step, blockers, and relevant uncommitted changes; keep it under 80
    lines.
 4. Update permanent documentation only when it became inaccurate.
