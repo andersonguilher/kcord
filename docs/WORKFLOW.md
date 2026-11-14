@@ -29,6 +29,9 @@ Treat code, manifests, configuration, and CI as the source of truth once present
 - `npm run test:session-afk`: start an isolated server with fake Discord sessions
   in a temporary folder and check one live session per account (newest device
   wins) and the silent AFK channel. Uses port 3311 (`KCORD_TEST_PORT`).
+- `npm run test:state-migration`: boot a real server on the JSON files an older release left
+  behind and check that every store reaches the database, that new changes are saved there,
+  and that on restart the database wins over tampered or corrupt old files. Uses port 3313.
 - `npm run test:voice-eq`: start an isolated server and check that only the owner
   changes the community voice equalizer, that values are validated and clamped,
   and that the setting reaches everyone and is saved. Uses port 3312.

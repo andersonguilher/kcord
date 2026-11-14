@@ -1,7 +1,7 @@
 import express from "express";
-import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
+import type { AppStateStore } from "./app-state.ts";
 
 // Failures that happen inside a user's app (for example the share source list)
 // are reported here so the owner can see them without asking for screenshots.
@@ -75,20 +75,19 @@ export function sanitizeClientReport(body: unknown) {
 }
 
 export function createClientReportsRouter(options: {
+  state: AppStateStore;
+  /** Where an older release kept `client-reports.json`, imported once. */
   dataDirectory: string;
   identify: (request: express.Request) => Reporter | null;
   isOwner: (request: express.Request) => boolean;
   onReport?: (report: ClientReport) => void;
 }) {
-  const dataPath = join(options.dataDirectory, "client-reports.json");
-  const reports = loadReports(dataPath);
+  const reports = loadReports(options.state, options.dataDirectory);
   const usage = new Map<string, number[]>();
   const router = express.Router();
 
   function persist() {
-    const temporaryPath = `${dataPath}.tmp`;
-    writeFileSync(temporaryPath, `${JSON.stringify(reports, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
-    renameSync(temporaryPath, dataPath);
+    options.state.set(REPORTS_STATE_KEY, reports);
   }
 
   router.post("/api/client-reports", (request, response) => {
@@ -193,10 +192,15 @@ export function createClientReportsRouter(options: {
   return router;
 }
 
-function loadReports(dataPath: string): ClientReport[] {
-  if (!existsSync(dataPath)) return [];
+const REPORTS_STATE_KEY = "client-reports";
+
+function loadReports(state: AppStateStore, legacyDirectory: string): ClientReport[] {
+  if (state.importLegacyJson(REPORTS_STATE_KEY, join(legacyDirectory, "client-reports.json")) === "invalid") {
+    console.warn("Relatórios de falha salvos estão inválidos; começando vazio.");
+    return [];
+  }
   try {
-    const stored = JSON.parse(readFileSync(dataPath, "utf8")) as ClientReport[];
+    const stored = state.get<ClientReport[]>(REPORTS_STATE_KEY);
     return Array.isArray(stored) ? stored
       .filter((report) => report && typeof report.id === "string")
       .map((report) => ({

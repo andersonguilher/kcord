@@ -82,7 +82,7 @@ report open, resolved, or ignored; state changes are persisted with the report.
 Reports require a Discord session,
 accept only known kinds and short plain-text fields, drop duplicates within two
 minutes, allow 30 per user per hour, and keep the latest 300 in
-`data/client-reports.json`. Window names leave the PC only when the user names the
+the application database. Window names leave the PC only when the user names the
 missing application, presses "Enviar diagnóstico" in the picker, and confirms.
 
 If Windows Graphics Capture cannot start a whole screen (`NotReadableError`), the
@@ -140,11 +140,16 @@ The importer must normalize both sources into a Kafcord-owned intermediate forma
 show a preview and warnings, and write only after explicit confirmation. It must
 never request or store a Discord user token. See `docs/DISCORD_IMPORT.md`.
 
-Applied community configuration is stored in `data/community.json`. Chat data is
-stored in `data/kafcord.sqlite` by default, or at `KAFCORD_CHAT_DATABASE_PATH`.
-Both are runtime data and intentionally ignored by Git. The SQLite file must live
-in persistent/shared storage during release deployments and be included in backup
-and recovery procedures. PostgreSQL should replace it before running multiple app
+All durable state lives in one SQLite file, `data/kafcord.sqlite` by default or
+`KAFCORD_CHAT_DATABASE_PATH`: the chat tables, and an `app_state` table of JSON
+documents for login sessions, profiles, imported Discord members, the community
+configuration, the voice equalizer, client failure reports and traffic statistics
+(`server/app-state.ts`). Earlier releases kept those documents as separate
+JSON files in `data/`; on the first start each one is imported once, and the files are
+then left in place (never read again) so a rollback still finds data. The SQLite file
+is runtime data, intentionally ignored by Git; it must live in persistent/shared
+storage during release deployments and is the only file to back up (use SQLite's
+backup API, because the write-ahead log holds recent changes). PostgreSQL should replace it before running multiple app
 server instances or supporting concurrent multi-community administration.
 
 Production runs the application as an unprivileged container behind the existing

@@ -85,8 +85,8 @@ Discord callback details.
 
 After entering the application, select the `⇩` button in the left rail, paste a
 Discord Server Template link, review the counts and warnings, and choose **Aplicar
-cópia**. The resulting community configuration is persisted locally in the ignored
-`data/community.json` file.
+cópia**. The resulting community configuration is saved in the application
+database (`data/kafcord.sqlite`, ignored by Git).
 
 The template `https://discord.new/pNTb9KZuGEPX` was imported and validated with 2
 categories, 6 text channels, 8 voice rooms, and 6 roles. Member migration and

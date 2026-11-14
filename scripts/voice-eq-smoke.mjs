@@ -1,7 +1,8 @@
 // Isolated server check: only the owner changes the community voice equalizer,
 // values are clamped, everyone gets the change, and it survives for new sessions.
 import { createHmac } from "node:crypto";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
 import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -82,7 +83,11 @@ try {
   assert.deepEqual(await broadcast, { gains: [12, -12, 1.5, 0, -3] });
   console.log("OK ajuste do dono chega a todos, limitado a ±12 dB em passos de 0,5.");
 
-  assert.deepEqual(JSON.parse(readFileSync(join(work, "data", "voice-eq.json"), "utf8")), { gains: [12, -12, 1.5, 0, -3] });
+  // The setting is saved in the application database, not in a file.
+  const database = new DatabaseSync(join(work, "data", "kafcord.sqlite"), { readOnly: true });
+  const saved = database.prepare("SELECT value FROM app_state WHERE key = ?").get("voice-eq");
+  database.close();
+  assert.deepEqual(JSON.parse(saved.value), { gains: [12, -12, 1.5, 0, -3] });
   const late = await client("late-session");
   assert.deepEqual(late.ready.voiceEq, { gains: [12, -12, 1.5, 0, -3] });
   console.log("OK ajuste fica salvo e quem entra depois já recebe.");

@@ -1,5 +1,5 @@
 import { createHash, createHmac, randomBytes, randomInt, randomUUID, timingSafeEqual } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { appState } from "./app-state.ts";
 import { join } from "node:path";
 import express, { Router, type Request, type Response } from "express";
 import type { CommunityConfig } from "./discord-template.ts";
@@ -185,11 +185,17 @@ function verifiedSessionId(value: string | undefined) {
   return id;
 }
 
+const SESSIONS_STATE_KEY = "auth-sessions";
+
 function loadSessions() {
   const activeSessions = new Map<string, AuthSession>();
-  if (!existsSync(sessionDataPath)) return activeSessions;
+  if (appState().importLegacyJson(SESSIONS_STATE_KEY, sessionDataPath) === "invalid") {
+    console.warn("Sessões persistidas inválidas; iniciando sem sessões anteriores.");
+    return activeSessions;
+  }
+  const stored = appState().get<AuthSession[]>(SESSIONS_STATE_KEY);
+  if (stored === undefined) return activeSessions;
   try {
-    const stored = JSON.parse(readFileSync(sessionDataPath, "utf8")) as AuthSession[];
     if (!Array.isArray(stored)) throw new Error("Formato inválido");
     for (const session of stored) {
       if (
@@ -212,13 +218,10 @@ function loadSessions() {
 const sessions = loadSessions();
 
 function persistSessions() {
-  mkdirSync(sessionDataDirectory, { recursive: true });
   const stored = [...sessions.values()]
     .filter((session) => session.expiresAt > Date.now())
     .map(({ preview: _preview, ...session }) => session);
-  const temporaryPath = `${sessionDataPath}.tmp`;
-  writeFileSync(temporaryPath, `${JSON.stringify(stored, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
-  renameSync(temporaryPath, sessionDataPath);
+  appState().set(SESSIONS_STATE_KEY, stored);
 }
 
 function refreshSession(session: AuthSession, response: Response) {
@@ -442,47 +445,35 @@ function pendingMembers(preview: CachedPreview, community: CommunityConfig) {
   });
 }
 
+const MEMBERS_STATE_KEY = "discord-members";
+
+/** The members imported from Discord. `invalid` means an older release's file could not be read. */
+function readImportedMembers(): { members: PendingMember[]; invalid: boolean } {
+  const legacyPath = join(process.cwd(), "data", "discord-members.json");
+  if (appState().importLegacyJson(MEMBERS_STATE_KEY, legacyPath) === "invalid") return { members: [], invalid: true };
+  const stored = appState().get<PendingMember[]>(MEMBERS_STATE_KEY);
+  return { members: Array.isArray(stored) ? stored : [], invalid: false };
+}
+
 function persistPendingMembers(nextMembers: PendingMember[]) {
-  const directory = join(process.cwd(), "data");
-  const path = join(directory, "discord-members.json");
-  mkdirSync(directory, { recursive: true });
-  let existing: PendingMember[] = [];
-  if (existsSync(path)) {
-    try {
-      const parsed = JSON.parse(readFileSync(path, "utf8"));
-      if (Array.isArray(parsed)) existing = parsed;
-    } catch {
-      throw new Error("O arquivo local de membros está inválido; a importação foi interrompida.");
-    }
-  }
+  const { members: existing, invalid } = readImportedMembers();
+  if (invalid) throw new Error("O arquivo local de membros está inválido; a importação foi interrompida.");
   const keys = new Set(nextMembers.map((member) => member.id));
   const merged = [...existing.filter((member) => !keys.has(member.id)), ...nextMembers];
-  const temporaryPath = `${path}.tmp`;
-  writeFileSync(temporaryPath, `${JSON.stringify(merged, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
-  renameSync(temporaryPath, path);
+  appState().set(MEMBERS_STATE_KEY, merged);
 }
 
 function claimPendingMemberships(user: DiscordUser) {
-  const path = join(process.cwd(), "data", "discord-members.json");
-  let members: PendingMember[] = [];
-  if (existsSync(path)) {
-    try {
-      const parsed = JSON.parse(readFileSync(path, "utf8"));
-      if (Array.isArray(parsed)) members = parsed;
-    } catch {
-      throw new Error("O arquivo local de membros está inválido; o login não alterou nenhum vínculo.");
-    }
-  }
+  const { members, invalid } = readImportedMembers();
+  if (invalid) throw new Error("O arquivo local de membros está inválido; o login não alterou nenhum vínculo.");
   const matching = members.filter((member) => member.discordUserId === user.id);
   const existingUserId = matching.find((member) => member.kafcordUserId)?.kafcordUserId;
   const kafcordUserId = existingUserId ?? randomUUID();
   if (matching.length > 0) {
-    const temporaryPath = `${path}.tmp`;
     const updated = members.map((member) => member.discordUserId === user.id
       ? { ...member, status: "claimed" as const, kafcordUserId }
       : member);
-    writeFileSync(temporaryPath, `${JSON.stringify(updated, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
-    renameSync(temporaryPath, path);
+    appState().set(MEMBERS_STATE_KEY, updated);
   }
   return {
     kafcordUserId,
@@ -594,16 +585,9 @@ export function kafcordUserIdsForDiscordUser(discordUserId: string) {
   const userIds = new Set([...sessions.values()]
     .filter((session) => session.user.id === discordUserId)
     .map((session) => session.kafcordUserId));
-  const importedMembersPath = join(process.cwd(), "data", "discord-members.json");
-  if (existsSync(importedMembersPath)) {
-    try {
-      const importedMembers = JSON.parse(readFileSync(importedMembersPath, "utf8")) as PendingMember[];
-      for (const member of importedMembers) {
-        if (member.discordUserId === discordUserId && member.kafcordUserId) userIds.add(member.kafcordUserId);
-      }
-    } catch {
-      // Invalid import data is handled by the import workflow; active sessions remain usable here.
-    }
+  // Invalid import data is handled by the import workflow; active sessions remain usable here.
+  for (const member of readImportedMembers().members) {
+    if (member.discordUserId === discordUserId && member.kafcordUserId) userIds.add(member.kafcordUserId);
   }
   return [...userIds];
 }
@@ -611,16 +595,9 @@ export function kafcordUserIdsForDiscordUser(discordUserId: string) {
 export function kafcordDiscordIdentityMappings() {
   const mappings = new Map<string, string>();
   for (const session of sessions.values()) mappings.set(session.kafcordUserId, session.user.id);
-  const importedMembersPath = join(process.cwd(), "data", "discord-members.json");
-  if (existsSync(importedMembersPath)) {
-    try {
-      const importedMembers = JSON.parse(readFileSync(importedMembersPath, "utf8")) as PendingMember[];
-      for (const member of importedMembers) {
-        if (member.kafcordUserId) mappings.set(member.kafcordUserId, member.discordUserId);
-      }
-    } catch {
-      // Invalid import data is handled by the import workflow; session mappings remain usable here.
-    }
+  // Invalid import data is handled by the import workflow; session mappings remain usable here.
+  for (const member of readImportedMembers().members) {
+    if (member.kafcordUserId) mappings.set(member.kafcordUserId, member.discordUserId);
   }
   return [...mappings].map(([kafcordUserId, discordUserId]) => ({ kafcordUserId, discordUserId }));
 }

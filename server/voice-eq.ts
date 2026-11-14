@@ -1,5 +1,5 @@
-import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type { AppStateStore } from "./app-state.ts";
 
 export const VOICE_EQ_BANDS = 5;
 export const VOICE_EQ_LIMIT_DB = 12;
@@ -16,34 +16,30 @@ export function sanitizeVoiceEq(value: unknown): VoiceEq | null {
   };
 }
 
+const STATE_KEY = "voice-eq";
+
 /**
  * Voice equalizer set by the owner and applied by every client to the voices it
- * hears. Kept out of community.json so a template import does not reset it.
+ * hears. Kept out of the community configuration so a template import does not
+ * reset it. `legacyDirectory` is where an older release kept `voice-eq.json`.
  */
-export function createVoiceEqStore(dataDirectory: string) {
-  const dataPath = join(dataDirectory, "voice-eq.json");
-
+export function createVoiceEqStore(state: AppStateStore, legacyDirectory?: string) {
   function load(): VoiceEq {
     const flat = { gains: Array<number>(VOICE_EQ_BANDS).fill(0) };
-    if (!existsSync(dataPath)) return flat;
-    try {
-      return sanitizeVoiceEq(JSON.parse(readFileSync(dataPath, "utf8"))) ?? flat;
-    } catch {
+    if (legacyDirectory && state.importLegacyJson(STATE_KEY, join(legacyDirectory, "voice-eq.json")) === "invalid") {
       console.warn("Equalizador de voz salvo inválido; usando o padrão.");
-      return flat;
     }
+    return sanitizeVoiceEq(state.get(STATE_KEY)) ?? flat;
   }
 
   let current = load();
 
   return {
     get: () => current,
-    /** Replaces the equalizer and writes it to disk atomically. */
+    /** Replaces the equalizer and saves it. */
     set(next: VoiceEq) {
       current = next;
-      const temporaryPath = `${dataPath}.tmp`;
-      writeFileSync(temporaryPath, `${JSON.stringify(current, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
-      renameSync(temporaryPath, dataPath);
+      state.set(STATE_KEY, current);
     },
   };
 }

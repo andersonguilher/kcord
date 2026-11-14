@@ -31,6 +31,7 @@ jobs:
           npm run test:voice-permissions
           npm run test:session-afk
           npm run test:voice-eq
+          npm run test:state-migration
       - name: Real-time smoke test
         env:
           KAFCORD_CHAT_DATABASE_PATH: ${{ runner.temp }}/ci-chat.sqlite

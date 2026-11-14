@@ -12,7 +12,8 @@ production-ready Discord replacement.
 - Node.js, Express, Socket.IO, and Multer: real-time/API server in `server/`.
 - Browser WebRTC: peer-to-peer audio and screen media.
 - Local `uploads/`: development-only file storage, ignored by Git.
-- Local `data/community.json`: persisted community configuration, ignored by Git.
+- Local `data/kafcord.sqlite`: chat plus application state (sessions, profiles, community
+  configuration, reports), ignored by Git.
 - `scripts/smoke-test.mjs`: two-client real-time integration check.
 
 No database, object storage, or SFU is configured. Production uses a self-hosted

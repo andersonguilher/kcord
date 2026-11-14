@@ -23,6 +23,7 @@
     "test:voice-permissions": "tsx scripts/voice-permission-smoke.ts",
     "test:session-afk": "node scripts/session-afk-smoke.mjs",
     "test:voice-eq": "node scripts/voice-eq-smoke.mjs",
+    "test:state-migration": "node scripts/state-migration-smoke.mjs",
     "test:desktop-hook": "electron scripts/desktop-hook-smoke.cjs",
     "test:ptt-hook": "node scripts/ptt-hook-smoke.cjs",
     "test:desktop-package": "node scripts/desktop-package-smoke.cjs",

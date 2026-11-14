@@ -17,6 +17,7 @@ import { parsePayload, profileSyncSchema, sessionJoinSchema } from "../shared/pr
 import type { Member } from "./types.ts";
 import { createFileStorage } from "./files.ts";
 import { createDownloadsRouter } from "./downloads.ts";
+import { appState, defaultDatabasePath } from "./app-state.ts";
 import { createProfileStore, type UserProfile } from "./profiles.ts";
 import { createVoiceEqStore, sanitizeVoiceEq } from "./voice-eq.ts";
 import {
@@ -88,8 +89,10 @@ function warmChannelLinkPreview(channelId: string, text: string, userId?: string
 
 const dataDirectory = join(process.cwd(), "data");
 const communityDataPath = join(dataDirectory, "community.json");
-const chatDatabasePath = process.env.KAFCORD_CHAT_DATABASE_PATH?.trim() || join(dataDirectory, "kafcord.sqlite");
+const chatDatabasePath = defaultDatabasePath();
 mkdirSync(dataDirectory, { recursive: true });
+// Sessions, profiles, reports and settings live in the same database file as the chat.
+const state = appState();
 const chatStore = new ChatStore(chatDatabasePath);
 chatStore.backfillAttachmentExpiry(FILE_RETENTION_MS);
 for (const mapping of kafcordDiscordIdentityMappings()) {
@@ -98,14 +101,20 @@ for (const mapping of kafcordDiscordIdentityMappings()) {
 
 
 
-const profileStore = createProfileStore(dataDirectory);
-const voiceEqStore = createVoiceEqStore(dataDirectory);
-const { trafficStats, recordTraffic, relayLastUpdatedAt } = createTrafficTracker(dataDirectory);
+const profileStore = createProfileStore(state, dataDirectory);
+const voiceEqStore = createVoiceEqStore(state, dataDirectory);
+const { trafficStats, recordTraffic, relayLastUpdatedAt } = createTrafficTracker(state, dataDirectory);
+
+const COMMUNITY_STATE_KEY = "community";
 
 function loadCommunity() {
-  if (!existsSync(communityDataPath)) return defaultCommunity;
+  if (state.importLegacyJson(COMMUNITY_STATE_KEY, communityDataPath) === "invalid") {
+    console.warn("Configuração persistida inválida; usando a comunidade padrão.");
+    return defaultCommunity;
+  }
   try {
-    const stored = JSON.parse(readFileSync(communityDataPath, "utf8")) as CommunityConfig;
+    const stored = state.get<CommunityConfig>(COMMUNITY_STATE_KEY);
+    if (!stored) return defaultCommunity;
     if (!stored.name || !Array.isArray(stored.textChannels) || stored.textChannels.length === 0) {
       return defaultCommunity;
     }
@@ -117,9 +126,7 @@ function loadCommunity() {
 }
 
 function persistCommunity(nextCommunity: CommunityConfig) {
-  const temporaryPath = `${communityDataPath}.tmp`;
-  writeFileSync(temporaryPath, `${JSON.stringify(nextCommunity, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
-  renameSync(temporaryPath, communityDataPath);
+  state.set(COMMUNITY_STATE_KEY, nextCommunity);
 }
 
 let community = loadCommunity();
@@ -186,6 +193,7 @@ app.use(express.json({ limit: "32kb", inflate: false }));
 app.use(createDiscordIntegrationRouter(() => community));
 app.use(createLinkPreviewRouter((request) => getDiscordSocketIdentity(request.headers.cookie)?.kafcordUserId ?? null));
 app.use(createClientReportsRouter({
+  state,
   dataDirectory,
   identify: (request) => {
     const identity = getDiscordSocketIdentity(request.headers.cookie);

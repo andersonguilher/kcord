@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type { AppStateStore } from "./app-state.ts";
 
 export type DailyTrafficStats = {
   date: string;
@@ -60,17 +61,24 @@ const NETWORK_SAMPLE_INTERVAL_MS = 60_000;
 const DEFAULT_CONTAINER_NETWORK_PATH = "/sys/class/net/eth0/statistics";
 
 /**
- * Tracks daily traffic and usage counters, persisted under `dataDirectory`.
+ * Tracks daily traffic and usage counters, saved in the application state.
+ * `dataDirectory` holds the relay counter file the host writes, and the
+ * `traffic-stats.json` of older releases, imported once.
  * Sampling of the container network and the coturn relay starts immediately.
  * `containerNetworkPath` is the Linux interface-statistics folder; tests point it elsewhere
  * so they never depend on the machine they run on.
  */
-export function createTrafficTracker(dataDirectory: string, { containerNetworkPath = DEFAULT_CONTAINER_NETWORK_PATH }: { containerNetworkPath?: string } = {}) {
-  const trafficStatsDataPath = join(dataDirectory, "traffic-stats.json");
+export function createTrafficTracker(state: AppStateStore, dataDirectory: string, { containerNetworkPath = DEFAULT_CONTAINER_NETWORK_PATH }: { containerNetworkPath?: string } = {}) {
+  const STATE_KEY = "traffic-stats";
   function loadTrafficStats(): TrafficStatsStore {
-    if (!existsSync(trafficStatsDataPath)) return { version: 2, startedAt: new Date().toISOString(), days: [] };
+    const imported = state.importLegacyJson(STATE_KEY, join(dataDirectory, "traffic-stats.json"));
+    if (imported === "invalid") {
+      console.warn("Estatísticas persistidas inválidas; iniciando uma nova série.");
+      return { version: 2, startedAt: new Date().toISOString(), days: [] };
+    }
+    if (!state.has(STATE_KEY)) return { version: 2, startedAt: new Date().toISOString(), days: [] };
     try {
-      const stored = JSON.parse(readFileSync(trafficStatsDataPath, "utf8")) as Partial<TrafficStatsStore>;
+      const stored = state.get<Partial<TrafficStatsStore>>(STATE_KEY) as Partial<TrafficStatsStore>;
       if (!stored || !Array.isArray(stored.days)) throw new Error("invalid stats");
       const isLegacyStore = stored.version !== 2;
       if (isLegacyStore) {
@@ -115,9 +123,7 @@ export function createTrafficTracker(dataDirectory: string, { containerNetworkPa
   function persistTrafficStats() {
     if (trafficPersistTimer) clearTimeout(trafficPersistTimer);
     trafficPersistTimer = null;
-    const temporaryPath = `${trafficStatsDataPath}.tmp`;
-    writeFileSync(temporaryPath, `${JSON.stringify(trafficStats, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
-    renameSync(temporaryPath, trafficStatsDataPath);
+    state.set(STATE_KEY, trafficStats);
   }
 
   function scheduleTrafficPersist() {

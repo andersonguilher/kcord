@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import express from "express";
+import { AppStateStore } from "../server/app-state.ts";
 import { createClientReportsRouter, sanitizeClientReport } from "../server/client-reports.ts";
 
 // Unknown kinds, empty messages and odd fields never reach storage.
@@ -21,9 +22,11 @@ const cleaned = sanitizeClientReport({
 assert.deepEqual(cleaned, { kind: "share-sources", message: "Falhou linha falsa", client: "desktop", appVersion: null, userAgent: "", context: { sourceType: "screen" } });
 
 const dataDirectory = mkdtempSync(join(tmpdir(), "kcord-reports-"));
+const state = new AppStateStore(join(dataDirectory, "state.sqlite"));
 const app = express();
 app.use(express.json());
 app.use(createClientReportsRouter({
+  state,
   dataDirectory,
   identify: (request) => request.headers["x-user"] ? { discordUserId: String(request.headers["x-user"]), displayName: "Alice" } : null,
   isOwner: (request) => request.headers["x-user"] === "owner",
@@ -68,11 +71,12 @@ try {
   })).json() as { report: { status: string; statusChangedAt?: string } };
   assert.equal(updated.report.status, "resolved");
   assert.ok(updated.report.statusChangedAt);
-  const stored = JSON.parse(readFileSync(join(dataDirectory, "client-reports.json"), "utf8")) as { id: string; status: string }[];
+  const stored = state.get<{ id: string; status: string }[]>("client-reports") ?? [];
   assert.equal(stored.length, 31);
   assert.equal(stored.find((report) => report.id === reportId)?.status, "resolved");
   console.log("client report checks passed");
 } finally {
   server.close();
+  state.close();
   rmSync(dataDirectory, { recursive: true, force: true });
 }
