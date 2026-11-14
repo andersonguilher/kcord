@@ -144,10 +144,11 @@ export class ChatStore {
         // Windows may not apply POSIX modes; the containing data directory still scopes access.
       }
     }
+    // The timeout comes first: switching the journal mode needs a lock other connections may hold.
+    this.database.exec("PRAGMA busy_timeout = 5000");
     this.database.exec("PRAGMA journal_mode = WAL");
     this.database.exec("PRAGMA synchronous = NORMAL");
     this.database.exec("PRAGMA foreign_keys = ON");
-    this.database.exec("PRAGMA busy_timeout = 5000");
     this.database.exec(`
       CREATE TABLE IF NOT EXISTS public_messages (
         id TEXT PRIMARY KEY,

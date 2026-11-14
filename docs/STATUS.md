@@ -31,7 +31,9 @@ Run before every change (`docs/WORKFLOW.md` has the full command list):
    chat, audio, push-to-talk, update and admin logic are hooks under `src/hooks`.
    Remaining in `src/App.tsx`: the JSX, auth/profile screens and join/leave orchestration.
 3. Move the remaining JSON files (sessions, profiles, reports, traffic stats) into SQLite.
-4. Replace the peer-to-peer mesh with a self-hosted SFU (LiveKit) behind a feature flag.
+4. Replace the peer-to-peer mesh with a self-hosted SFU (LiveKit) behind a per-channel flag.
+   Server side (config, token endpoint, RTC config) is done and tested; the client
+   transport is next. See `docs/LIVEKIT.md`.
 5. Signed Windows releases built and signed in CI (see `CODE_SIGNING_POLICY.md`).
 
 ## Known limitations

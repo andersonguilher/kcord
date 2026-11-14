@@ -127,6 +127,12 @@ export const rtcSignalSchema = z.object({
   candidate: passthrough,
 });
 
+/** Body of `POST /api/livekit/token`: which live socket is asking, and for which voice channel. */
+export const liveKitTokenRequestSchema = z.object({
+  socketId: text(100, { trim: true }),
+  channelId: text(40, { trim: true }),
+});
+
 export type ChatSendPayload = z.output<typeof chatSendSchema>;
 export type ChatEditPayload = z.output<typeof chatEditSchema>;
 export type ChatReactPayload = z.output<typeof chatReactSchema>;

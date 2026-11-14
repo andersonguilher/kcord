@@ -16,6 +16,8 @@ import { createVoiceRegistry, registerVoiceHandlers } from "./voice-handlers.ts"
 import { parsePayload, profileSyncSchema, sessionJoinSchema } from "../shared/protocol.ts";
 import type { Member } from "./types.ts";
 import { createFileStorage } from "./files.ts";
+import { readLiveKitConfig } from "./livekit.ts";
+import { createLiveKitRouter } from "./livekit-routes.ts";
 import { createDownloadsRouter } from "./downloads.ts";
 import { appState, defaultDatabasePath } from "./app-state.ts";
 import { createProfileStore, type UserProfile } from "./profiles.ts";
@@ -53,6 +55,8 @@ const turnUrls = (process.env.TURN_URLS ?? "")
   .filter(Boolean);
 const turnSharedSecret = process.env.TURN_SHARED_SECRET?.trim() ?? "";
 const turnRealm = process.env.TURN_REALM?.trim() || "kafcord.kafly.com.br";
+// Null unless LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET and LIVEKIT_VOICE_CHANNEL_IDS are all set.
+const liveKitConfig = readLiveKitConfig();
 const defaultCommunity: CommunityConfig = {
   name: "KCord",
   categories: [],
@@ -239,8 +243,22 @@ app.get("/api/rtc-config", (request, response) => {
   }
 
   response.setHeader("Cache-Control", "no-store");
-  response.json({ iceServers, iceTransportPolicy: "all", turnRealm });
+  response.json({
+    iceServers,
+    iceTransportPolicy: "all",
+    turnRealm,
+    // Voice channels served by LiveKit; every other channel uses the peer-to-peer mesh.
+    ...(liveKitConfig ? { livekitChannelIds: liveKitConfig.channelIds === "*" ? "*" : [...liveKitConfig.channelIds] } : {}),
+  });
 });
+
+app.use(createLiveKitRouter({
+  config: liveKitConfig,
+  members,
+  getCommunity: () => community,
+  identify: (request) => getDiscordSocketIdentity(request.headers.cookie),
+  isAfkChannel,
+}));
 
 app.get("/api/profile", (request, response) => {
   const identity = getDiscordSocketIdentity(request.headers.cookie);
