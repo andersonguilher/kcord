@@ -1,7 +1,7 @@
 # Replacing the peer-to-peer mesh with LiveKit
 
-Status: server side done and tested; client side in progress. Nothing is enabled
-by default, so every voice channel still uses the mesh.
+Status: server side done, tested and deployed (running, unused); client side in progress.
+Nothing is enabled by default, so every voice channel still uses the mesh.
 
 ## Why
 
@@ -64,17 +64,10 @@ room:
 ```
 
 Run it with host networking (it avoids Docker NAT rules, which have failed before after
-daemon restarts) and proxy the signalling path over TLS:
-
-```nginx
-location /livekit/ {
-    proxy_pass http://127.0.0.1:7880/;
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection "upgrade";
-    proxy_read_timeout 3600s;
-}
-```
+daemon restarts) and add `deploy/livekit/nginx-location.conf` to the HTTPS server block.
+It exposes only the two paths browsers need and answers 404 for the rest of `/livekit/`,
+so the admin API (`/twirp`), metrics and profiling endpoints are not reachable from the
+internet. The files and steps are in `deploy/livekit/`.
 
 Open `7881/tcp` and `50000-50100/udp` to the world. Everything else stays closed.
 
