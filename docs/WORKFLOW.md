@@ -41,7 +41,8 @@ built-in `node:sqlite` module. `KAFCORD_CHAT_DATABASE_PATH` defaults to
 `data/kafcord.sqlite`; production must point it at persistent/shared storage.
 
 CI (`.github/workflows/ci.yml`) runs typecheck, lint, unit tests, build, the isolated
-integration tests, and the real-time smoke test on every push and pull request.
+integration tests, and the real-time smoke test on every push to `main` and on every
+pull request. Pushing a task branch does not run it until its pull request is open.
 Shared event payload schemas live in `shared/protocol.ts` (zod) and are used by the
 server; extend them when adding or changing socket events.
 
@@ -50,9 +51,11 @@ server; extend them when adding or changing socket events.
 1. Determine the user's intent from meaning, not an exact phrase.
 2. Read `AGENTS.md` and the relevant parts of `docs/STATUS.md` without rereading
    context already available.
-3. If Git exists, inspect `git status --short`; otherwise note that change tracking
-   is unavailable.
-4. Inspect only the files needed for the selected work.
+3. If Git exists, inspect `git status --short` and the current branch; otherwise note
+   that change tracking is unavailable.
+4. Before changing files, make sure the work is on an up-to-date task branch, never on
+   `main` (see [Working with Git](#working-with-git-home-and-work), steps 1 and 3).
+5. Inspect only the files needed for the selected work.
 
 ## Plan the day
 
@@ -68,11 +71,13 @@ today?":
 ## Resume uncommitted work
 
 1. Inspect Git status and relevant diffs before editing when Git exists.
-2. Distinguish user changes, completed work, and partial implementation.
-3. Use `docs/STATUS.md` and history only to clarify the diffs' intent.
-4. Reconstruct the objective, prior validation, and safest next step.
-5. Continue and validate while preserving all existing changes.
-6. Ask only when plausible interpretations lead to materially different results.
+2. If the task was started on another computer or on an earlier day, get its branch up
+   to date first (Working with Git, step 3).
+3. Distinguish user changes, completed work, and partial implementation.
+4. Use `docs/STATUS.md` and history only to clarify the diffs' intent.
+5. Reconstruct the objective, prior validation, and safest next step.
+6. Continue and validate while preserving all existing changes.
+7. Ask only when plausible interpretations lead to materially different results.
 
 Without Git, inspect relevant files and their surrounding context directly, and
 state the resulting evidence limit.
@@ -110,12 +115,92 @@ handoff":
 5. Record durable decisions in a memory document or ADR only when one is warranted.
 6. Summarize changed files, validation, risks, and pending work.
 7. Suggest coherent commits if useful, but do not stage, commit, or push unless the
-   user explicitly requests it.
+   user explicitly requests it. If work is not committed and pushed, say so: it will
+   not be available on another computer (Working with Git, step 2).
 
 ## Git and delivery policy
 
-- Git is initialized on `main` with Conventional Commit messages (`feat:`, `fix:`,
-  `docs:`, `refactor:`); no branch or review procedure is defined yet.
+- One branch per task, merged into `main` through a pull request. Never work directly
+  on `main`. Branch names start with `feat/` for new features or `fix/` for corrections.
+- Use Conventional Commit messages (`feat:`, `fix:`, `docs:`, `refactor:`).
+- Never use `git push --force`.
 - Treat pre-existing uncommitted changes as user-owned and preserve them.
 - Do not stage, commit, push, publish, deploy, or send external messages unless the
-  user explicitly authorizes that action.
+  user explicitly authorizes that action. This also applies to the steps below.
+
+## Working with Git (home and work)
+
+Replace `feat/task-name` with the real branch name.
+
+### First time on a computer
+
+```bash
+git clone <repository-url>
+cd <created-folder>
+npm install
+```
+
+Git-ignored files such as `.env`, `data/`, `uploads/`, and `*.private.md` do not travel
+with Git. Each computer has its own.
+
+### 1. Start a task (once per task)
+
+```bash
+git switch main
+git pull
+git switch -c feat/task-name
+```
+
+### 2. Before leaving (always)
+
+```bash
+git status                              # check the files before adding them
+git add -A
+git commit -m "feat: what I did"
+git push -u origin HEAD
+```
+
+### 3. Continue the task (on the other computer or the next day)
+
+```bash
+git fetch
+git switch feat/task-name
+git pull
+```
+
+### 4. Bring in other people's changes (from time to time, on the task branch)
+
+Commit any pending work first.
+
+```bash
+git fetch
+git merge origin/main
+```
+
+### 5. Finish the task
+
+1. Do step 2.
+2. Open a pull request on GitHub.
+3. After approval, and with CI passing, click **Merge**.
+4. Click **Delete branch**.
+
+### 6. Clean up (after the merge, on every computer used)
+
+```bash
+git switch main
+git pull
+git fetch --prune
+git branch -d feat/task-name
+```
+
+If `-d` refuses, first confirm on GitHub that the pull request shows **Merged** and that
+no commit was left unpushed. Only then run `git branch -D feat/task-name`.
+
+### Help
+
+| Situation | What to do |
+| --- | --- |
+| Which branch am I on? | `git branch` (the current one has `*`) |
+| What changed? | `git status` |
+| `CONFLICT` appeared | Do not force anything. Resolve the marked files or ask for help. |
+| Push was rejected | Run `git pull` and try again. Never use `--force`. |
