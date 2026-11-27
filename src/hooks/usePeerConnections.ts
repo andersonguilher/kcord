@@ -49,6 +49,14 @@ export function usePeerConnections(options: PeerConnectionOptions) {
   const livekitChannelIdsRef = useRef<string[] | "*">([]);
   /** What the sender said each incoming video track is (camera or screen), by `peerId:trackId`. */
   const remoteTrackKindsRef = useRef(new Map<string, RemoteTrackKind>());
+  /** Peers this side owes an offer: it was asked for while another negotiation was under way. */
+  const owedOffersRef = useRef(new WeakSet<RTCPeerConnection>());
+  /** Peers whose offer is being created right now. */
+  const offeringRef = useRef(new WeakSet<RTCPeerConnection>());
+  /** Peers whose answer is being applied: until it is, they still look like they are waiting for it. */
+  const applyingAnswerRef = useRef(new WeakSet<RTCPeerConnection>());
+  /** Peers whose last offer was ignored because ours takes precedence. */
+  const ignoredOffersRef = useRef(new WeakSet<RTCPeerConnection>());
 
   const closePeer = useCallback((peerId: string) => {
     const { peersRef, cameraSendersRef, screenSendersRef, setScreenPreviews, setActiveScreenPeerId, setExpandedScreenPeerId } = optionsRef.current;
@@ -159,10 +167,25 @@ export function usePeerConnections(options: PeerConnectionOptions) {
   const makeOffer = useCallback(async (peerId: string) => {
     const { socketRef, cameraRef } = optionsRef.current;
     const peer = createPeer(peerId);
-    const offer = await peer.createOffer();
-    await peer.setLocalDescription(offer);
-    socketRef.current?.emit("rtc:signal", { target: peerId, description: peer.localDescription });
-    void tuneOutgoingMedia(peer, cameraRef.current?.getVideoTracks()[0]?.id);
+    // One negotiation at a time: this offer is made when the current one is over.
+    if (offeringRef.current.has(peer) || peer.signalingState !== "stable") {
+      owedOffersRef.current.add(peer);
+      return;
+    }
+    offeringRef.current.add(peer);
+    owedOffersRef.current.delete(peer);
+    try {
+      const offer = await peer.createOffer();
+      await peer.setLocalDescription(offer);
+      socketRef.current?.emit("rtc:signal", { target: peerId, description: peer.localDescription });
+      void tuneOutgoingMedia(peer, cameraRef.current?.getVideoTracks()[0]?.id);
+    } catch (error) {
+      if (peer.signalingState === "stable") throw error;
+      // The other side's offer got in first.
+      owedOffersRef.current.add(peer);
+    } finally {
+      offeringRef.current.delete(peer);
+    }
   }, [createPeer]);
 
   /** ICE servers (STUN plus short-lived TURN credentials), fetched once; falls back to public STUN. */
@@ -211,20 +234,44 @@ export function usePeerConnections(options: PeerConnectionOptions) {
     const { socketRef, cameraRef, setNotice } = optionsRef.current;
     try {
       const peer = createPeer(from);
+      // Candidates of an offer that was ignored do not fit the connection, and that is expected.
+      const addCandidate = (value: RTCIceCandidateInit, ignored: boolean) => peer.addIceCandidate(value).catch((error) => {
+        if (!ignored) throw error;
+      });
       if (description) {
-        await peer.setRemoteDescription(description);
+        const collision = description.type === "offer" && (offeringRef.current.has(peer)
+          || (peer.signalingState === "have-local-offer" && !applyingAnswerRef.current.has(peer)));
+        // Both sides offered at once. Exactly one of them gives way, decided by the socket ids.
+        if (collision && !((socketRef.current?.id ?? "") > from)) {
+          ignoredOffersRef.current.add(peer);
+          return;
+        }
+        const ignoredBefore = ignoredOffersRef.current.delete(peer);
+        // Giving way discards our offer, so it has to be made again afterwards.
+        if (collision) owedOffersRef.current.add(peer);
+        if (description.type === "answer") applyingAnswerRef.current.add(peer);
+        try {
+          await peer.setRemoteDescription(description);
+        } finally {
+          if (description.type === "answer") applyingAnswerRef.current.delete(peer);
+        }
         const queuedCandidates = pendingIceCandidatesRef.current.get(from) ?? [];
         pendingIceCandidatesRef.current.delete(from);
-        for (const queuedCandidate of queuedCandidates) await peer.addIceCandidate(queuedCandidate);
+        for (const queuedCandidate of queuedCandidates) await addCandidate(queuedCandidate, ignoredBefore);
         if (description.type === "offer") {
           const answer = await peer.createAnswer();
           await peer.setLocalDescription(answer);
           socketRef.current?.emit("rtc:signal", { target: from, description: peer.localDescription });
           void tuneOutgoingMedia(peer, cameraRef.current?.getVideoTracks()[0]?.id);
         }
+        // An answer cannot carry a track the offer had no room for, such as a camera
+        // that was already on when this member arrived: that takes an offer of our own.
+        const leftOut = description.type === "offer"
+          && peer.getTransceivers().some((transceiver) => transceiver.sender.track && !transceiver.currentDirection?.startsWith("send"));
+        if (leftOut || owedOffersRef.current.has(peer)) await makeOffer(from);
       }
       if (candidate) {
-        if (peer.remoteDescription) await peer.addIceCandidate(candidate);
+        if (peer.remoteDescription) await addCandidate(candidate, ignoredOffersRef.current.has(peer));
         else pendingIceCandidatesRef.current.set(from, [
           ...(pendingIceCandidatesRef.current.get(from) ?? []),
           candidate,
@@ -233,7 +280,7 @@ export function usePeerConnections(options: PeerConnectionOptions) {
     } catch {
       setNotice("Não foi possível sincronizar uma conexão de voz.");
     }
-  }, [createPeer]);
+  }, [createPeer, makeOffer]);
 
   /** Stops showing someone's shared screen without touching their other media. */
   const dropRemoteScreenStream = useCallback((peerId: string) => {

@@ -254,9 +254,10 @@ try {
     await ana.getByRole("button", { name: "Desconectar da chamada" }).waitFor({ timeout: 10_000 });
     await bia.getByRole("button", { name: /Café aberto/ }).first().click();
     await bia.getByRole("button", { name: "Desconectar da chamada" }).waitFor({ timeout: 10_000 });
-    // A remote audio element only exists once the peer connection delivered a track.
-    await ana.waitForFunction(() => document.querySelectorAll("audio").length > 0, null, { timeout: 20_000 });
-    await bia.waitForFunction(() => document.querySelectorAll("audio").length > 0, null, { timeout: 20_000 });
+    // The element exists as soon as the member is listed; it only has a track once the connection delivered one.
+    const hearsSomeone = () => [...document.querySelectorAll("audio")].some((audio) => (audio.srcObject?.getAudioTracks().length ?? 0) > 0);
+    await ana.waitForFunction(hearsSomeone, null, { timeout: 20_000 });
+    await bia.waitForFunction(hearsSomeone, null, { timeout: 20_000 });
     if (useLiveKit) {
       const rtc = await (await fetch(`${url}/api/rtc-config`)).json();
       if (!JSON.stringify(rtc.livekitChannelIds ?? []).includes("cafe")) throw new Error("the server did not list the channel as LiveKit");
@@ -293,6 +294,20 @@ try {
     await ana.locator('button[title="Ligar câmera"]').first().click();
     await anaCameraTile.waitFor({ timeout: 20_000 });
     await framesArrive(anaCameraTile.locator("video"), { advancing: true, what: "camera after turning it on again" });
+    await ana.locator('button[title="Desligar câmera"]').first().click();
+    await anaCameraTile.waitFor({ state: "detached", timeout: 15_000 });
+  });
+
+  await step("voice: a member who joins later sees a camera that was already on", async () => {
+    const leave = bia.getByRole("button", { name: "Desconectar da chamada" });
+    await leave.click();
+    await leave.waitFor({ state: "detached" });
+    await ana.locator('button[title="Ligar câmera"]').first().click();
+    await ana.locator('button[title="Desligar câmera"]').first().waitFor({ timeout: 15_000 });
+    await bia.getByRole("button", { name: /Café aberto/ }).first().click();
+    const anaCameraTile = bia.locator(".participant-tile.has-camera", { hasText: "Ana" });
+    await anaCameraTile.waitFor({ timeout: 20_000 });
+    await framesArrive(anaCameraTile.locator("video"), { advancing: true, what: "camera that was on before joining" });
     await ana.locator('button[title="Desligar câmera"]').first().click();
     await anaCameraTile.waitFor({ state: "detached", timeout: 15_000 });
   });

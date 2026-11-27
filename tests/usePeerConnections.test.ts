@@ -58,6 +58,9 @@ class FakePeer {
   ontrack: ((event: { track: FakeTrack }) => void) | null = null;
   onconnectionstatechange: (() => void) | null = null;
   failSetRemote = false;
+  signalingState = "stable";
+  /** What the last negotiation settled for each added track; a track an answer had no room for stays null. */
+  directions = new Map<FakeTrack, string>();
   constructor(configuration: RTCConfiguration) {
     FakePeer.lastConfiguration = configuration;
     FakePeer.instances.push(this);
@@ -72,13 +75,21 @@ class FakePeer {
   createAnswer() {
     return Promise.resolve({ type: "answer", sdp: "answer-sdp" });
   }
+  getTransceivers() {
+    return this.added.map(({ track }) => ({ sender: { track }, currentDirection: this.directions.get(track) ?? null }));
+  }
   setLocalDescription(description: unknown) {
     this.localDescription = description;
+    const { type } = description as { type: string };
+    this.signalingState = type === "offer" ? "have-local-offer" : "stable";
     return Promise.resolve();
   }
   setRemoteDescription(description: unknown) {
     if (this.failSetRemote) return Promise.reject(new Error("bad sdp"));
     this.remoteDescription = description;
+    const { type } = description as { type: string };
+    if (type === "answer") for (const { track } of this.added) this.directions.set(track, "sendrecv");
+    this.signalingState = type === "offer" ? "have-remote-offer" : "stable";
     return Promise.resolve();
   }
   addIceCandidate(candidate: unknown) {
@@ -464,6 +475,79 @@ describe("signaling", () => {
     peerOf("a").failSetRemote = true;
     await act(async () => result.current.onRtcSignal({ from: "a", description: { type: "offer", sdp: "x" } }));
     expect(setNotice).toHaveBeenCalledWith("Não foi possível sincronizar uma conexão de voz.");
+  });
+});
+
+describe("renegotiation", () => {
+  const signals = (type: "offer" | "answer") => socket.emit.mock.calls
+    .filter(([event, payload]) => event === "rtc:signal" && payload.description?.type === type).length;
+
+  it("offers a camera that was already on when the member arrived, which the answer cannot carry", async () => {
+    refs.cameraRef.current = new FakeStream([track("video")]);
+    const { result } = renderHook(useHarness);
+    await act(async () => result.current.onRtcSignal({ from: "a", description: { type: "offer", sdp: "x" } }));
+    expect(signals("answer")).toBe(1);
+    expect(signals("offer")).toBe(1);
+  });
+
+  it("holds an offer asked for during a negotiation and makes it once, after the answer", async () => {
+    const { result } = renderHook(useHarness);
+    await act(async () => result.current.makeOffer("a"));
+    await act(async () => {
+      await result.current.makeOffer("a");
+      await result.current.makeOffer("a");
+    });
+    expect(signals("offer")).toBe(1);
+    await act(async () => result.current.onRtcSignal({ from: "a", description: { type: "answer", sdp: "x" } }));
+    expect(signals("offer")).toBe(2);
+    await act(async () => result.current.onRtcSignal({ from: "a", description: { type: "answer", sdp: "y" } }));
+    expect(signals("offer")).toBe(2);
+  });
+
+  it("accepts an offer that arrives while the answer to its own offer is still being applied", async () => {
+    Object.assign(socket, { id: "a" }); // The side that would keep its own offer in a real collision.
+    const { result } = renderHook(useHarness);
+    await act(async () => result.current.makeOffer("b"));
+    const peer = peerOf("b");
+    const apply = peer.setRemoteDescription.bind(peer);
+    let finishAnswer = () => {};
+    // Like a browser, the answer takes a while and is applied before the offer that follows it.
+    peer.setRemoteDescription = (description: unknown) => {
+      if ((description as { type: string }).type === "answer") {
+        return new Promise<void>((resolve) => {
+          finishAnswer = () => void apply(description).then(resolve);
+        });
+      }
+      finishAnswer();
+      return apply(description);
+    };
+    await act(async () => {
+      await Promise.all([
+        result.current.onRtcSignal({ from: "b", description: { type: "answer", sdp: "x" } }),
+        result.current.onRtcSignal({ from: "b", description: { type: "offer", sdp: "next" } }),
+      ]);
+    });
+    expect(peer.remoteDescription).toEqual({ type: "offer", sdp: "next" });
+    expect(signals("answer")).toBe(1);
+  });
+
+  it("keeps its own offer when both offered at once and its socket id is the lower one", async () => {
+    Object.assign(socket, { id: "a" });
+    const { result } = renderHook(useHarness);
+    await act(async () => result.current.makeOffer("b"));
+    await act(async () => result.current.onRtcSignal({ from: "b", description: { type: "offer", sdp: "theirs" } }));
+    expect(peerOf("b").remoteDescription).toBeNull();
+    expect(signals("answer")).toBe(0);
+    expect(setNotice).not.toHaveBeenCalled();
+  });
+
+  it("gives way when both offered at once and its socket id is the higher one, then offers again", async () => {
+    Object.assign(socket, { id: "b" });
+    const { result } = renderHook(useHarness);
+    await act(async () => result.current.makeOffer("a"));
+    await act(async () => result.current.onRtcSignal({ from: "a", description: { type: "offer", sdp: "theirs" } }));
+    expect(signals("answer")).toBe(1);
+    expect(signals("offer")).toBe(2);
   });
 });
 
