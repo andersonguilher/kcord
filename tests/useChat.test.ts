@@ -41,6 +41,7 @@ function mount() {
         fileInputRef: { current: null },
         directFileInputRef: { current: null },
         activeChannel: props.activeChannel,
+        activeChannelName: props.activeChannel,
         authorName: "Ana",
         getAvatarUrl: () => "/avatars/ana.png",
         setNotice,

@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState, type ClipboardEvent as ReactClipboardEvent, type FormEvent, type RefObject } from "react";
 import type { Socket } from "socket.io-client";
+import { channelFileError, channelTextError } from "../../shared/channel-rules";
 import { MAX_UPLOAD_BYTES, formatSize } from "../lib/format";
 import type { ChatMessage, DirectContact, DirectMessage, FileAttachment } from "../types";
 
@@ -23,6 +24,7 @@ export type ChatOptions = {
   fileInputRef: RefObject<HTMLInputElement | null>;
   directFileInputRef: RefObject<HTMLInputElement | null>;
   activeChannel: string;
+  activeChannelName: string;
   authorName: string;
   getAvatarUrl: () => string | null | undefined;
   setNotice: (text: string) => void;
@@ -150,9 +152,14 @@ export function useChat(options: ChatOptions) {
 
   const sendMessage = (event: FormEvent) => {
     event.preventDefault();
-    const { socketRef, activeChannel, getAvatarUrl } = optionsRef.current;
+    const { socketRef, activeChannel, activeChannelName, getAvatarUrl, setNotice } = optionsRef.current;
     const text = messageDraft.trim();
     if (!text || !socketRef.current) return;
+    const channelError = channelTextError(activeChannelName, text);
+    if (channelError) {
+      setNotice(channelError);
+      return;
+    }
     socketRef.current.emit("chat:send", {
       channelId: activeChannel,
       text,
@@ -291,12 +298,18 @@ export function useChat(options: ChatOptions) {
   // ---- uploads ----
 
   const uploadFile = async (file?: File, recipientUserId?: string) => {
-    const { socketRef, fileInputRef, directFileInputRef, activeChannel, authorName, setNotice } = optionsRef.current;
+    const { socketRef, fileInputRef, directFileInputRef, activeChannel, activeChannelName, authorName, setNotice } = optionsRef.current;
     if (!file || !socketRef.current) return;
     const clearFileInputs = () => {
       if (fileInputRef.current) fileInputRef.current.value = "";
       if (directFileInputRef.current) directFileInputRef.current.value = "";
     };
+    const channelError = recipientUserId ? null : channelFileError(activeChannelName, file.name);
+    if (channelError) {
+      setNotice(channelError);
+      clearFileInputs();
+      return;
+    }
     if (file.size > MAX_UPLOAD_BYTES) {
       setNotice("Esse arquivo excede o limite de 10 MB.");
       clearFileInputs();
