@@ -11,6 +11,7 @@ const windowList = require("./window-list.cjs");
 const { listWindows, windowProcessId } = windowList;
 const { createAppAudio } = require("./app-audio.cjs");
 const { createWindowState } = require("./window-state.cjs");
+const { captureEnvironment, parseCaptureMode, serializeCaptureMode, captureEnvironmentChanged } = require("./capture-mode.cjs");
 
 let uIOhook = null;
 let UiohookKey = {};
@@ -39,13 +40,13 @@ process.on("unhandledRejection", (reason) => {
 const captureModePath = path.join(app.getPath("userData"), "capture-mode.json");
 function readCaptureMode() {
   try {
-    const stored = JSON.parse(fs.readFileSync(captureModePath, "utf8"));
-    return stored?.screen === "legacy" ? "legacy" : "wgc";
+    return parseCaptureMode(fs.readFileSync(captureModePath, "utf8"));
   } catch {
-    return "wgc";
+    return parseCaptureMode("");
   }
 }
-const screenCaptureMode = readCaptureMode();
+const savedCaptureMode = readCaptureMode();
+const screenCaptureMode = savedCaptureMode.screen;
 
 // Prefer Windows Graphics Capture for normal sharing. Compatibility mode uses
 // repeated desktopCapturer snapshots in the renderer instead, because Chromium
@@ -514,17 +515,37 @@ function createWindow() {
 ipcMain.handle("desktop-share:list", (event, type) => (isTrustedIpcEvent(event) ? listSources(type) : []));
 ipcMain.handle("desktop-issues:take", (event) => (isTrustedIpcEvent(event) ? takeIssues() : []));
 onIssue(() => mainWindow?.webContents.send("desktop-issues:pending"));
+async function gpuDevices() {
+  try {
+    return (await app.getGPUInfo("basic"))?.gpuDevice ?? [];
+  } catch {
+    return [];
+  }
+}
+async function currentCaptureEnvironment() {
+  return captureEnvironment({ osRelease: os.release(), chrome: process.versions.chrome, gpuDevices: await gpuDevices() });
+}
+function saveCaptureMode(screen, environment) {
+  fs.writeFileSync(captureModePath, serializeCaptureMode(screen, environment));
+}
 // Windows build and graphics card go with every report from this app.
 ipcMain.handle("system:info", async (event) => {
   if (!isTrustedIpcEvent(event)) return null;
-  let gpu = "";
-  try {
-    const info = await app.getGPUInfo("basic");
-    gpu = (info?.gpuDevice ?? []).map((device) => `${device.active ? "*" : ""}${device.vendorId?.toString(16) ?? "?"}:${device.deviceId?.toString(16) ?? "?"}${device.driverVersion ? ` driver ${device.driverVersion}` : ""}`).join(", ");
-  } catch {
-    gpu = "";
+  const devices = await gpuDevices();
+  const gpu = devices.map((device) => `${device.active ? "*" : ""}${device.vendorId?.toString(16) ?? "?"}:${device.deviceId?.toString(16) ?? "?"}${device.driverVersion ? ` driver ${device.driverVersion}` : ""}`).join(", ");
+  const environment = captureEnvironment({ osRelease: os.release(), chrome: process.versions.chrome, gpuDevices: devices });
+  // Compatible mode saved by an older release has no environment: record the
+  // current one, so a later Windows, driver or Chromium update can be noticed.
+  if (screenCaptureMode === "legacy" && !savedCaptureMode.environment) {
+    try {
+      saveCaptureMode("legacy", environment);
+      savedCaptureMode.environment = environment;
+    } catch (error) {
+      recordIssue("salvar ambiente do modo de captura", error);
+    }
   }
-  return { osRelease: os.release(), arch: process.arch, gpu, screenCaptureMode };
+  const captureEnvironmentUpdated = captureEnvironmentChanged(savedCaptureMode, environment);
+  return { osRelease: os.release(), arch: process.arch, gpu, screenCaptureMode, captureEnvironmentUpdated };
 });
 // Monitors and the screens offered in the picker, sent when a screen share fails.
 ipcMain.handle("system:displays", (event) => {
@@ -576,10 +597,10 @@ ipcMain.handle("desktop-share:snapshot", async (event, request) => {
   }
 });
 // Saves the chosen capturer and restarts, since Chromium reads it only at start.
-ipcMain.handle("capture:set-screen-mode", (event, mode) => {
+ipcMain.handle("capture:set-screen-mode", async (event, mode) => {
   if (!isTrustedIpcEvent(event) || (mode !== "legacy" && mode !== "wgc")) return false;
   try {
-    fs.writeFileSync(captureModePath, JSON.stringify({ screen: mode }));
+    saveCaptureMode(mode, await currentCaptureEnvironment());
   } catch (error) {
     recordIssue("salvar modo de captura", error);
     return false;

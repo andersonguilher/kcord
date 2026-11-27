@@ -91,7 +91,10 @@ and rejoins the voice room. Chromium 151+ forces WGC for monitor video tracks on
 Windows 11 build 26100+, so this mode does not request another Chromium track: it
 polls bounded JPEG snapshots through Electron and feeds a canvas track at up to
 10 fps. Window capture keeps WGC. The user can return to normal WGC capture in
-Settings → Windows.
+Settings → Windows. The mode never switches back by itself: it is saved with the
+Windows build, graphics drivers and Chromium version it was chosen under, and
+when any of them changes, the share notice and Settings suggest trying WGC again.
+Every compatible share also points at sharing a window for normal fps.
 
 Discord-backed sessions authenticate normal users, and the local guest mode is
 restricted to the configured owner. Files are still not malware-scanned, so a

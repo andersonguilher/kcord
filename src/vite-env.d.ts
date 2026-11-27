@@ -20,7 +20,14 @@ type DesktopShareDiagnosis = {
 
 type DesktopIssue = { area: string; message: string; details: string; at: string };
 
-type DesktopSystemInfo = { osRelease: string; arch: string; gpu: string; screenCaptureMode: "wgc" | "legacy" };
+type DesktopSystemInfo = {
+  osRelease: string;
+  arch: string;
+  gpu: string;
+  screenCaptureMode: "wgc" | "legacy";
+  /** Compatible mode was chosen before a Windows, graphics driver or Chromium update. Absent in older desktop releases. */
+  captureEnvironmentUpdated?: boolean;
+};
 type DesktopShareSnapshot = { dataUrl: string; width: number; height: number };
 
 type DesktopUpdateStatus = {

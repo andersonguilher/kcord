@@ -1391,6 +1391,7 @@ button { border-radius: 4px; }
 .processing-grid > label { min-height: 66px; padding: 12px 14px; border: 1px solid #36383e; border-radius: 8px; background: #1d1f23; }
 .capture-mode-setting { grid-column: 1 / -1; min-height: 74px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 14px; border: 1px solid #36383e; border-radius: 8px; background: #1d1f23; }
 .capture-mode-setting > span { display: grid; gap: 4px; }
+.capture-mode-setting small.capture-mode-hint { color: #f0b232; }
 .capture-mode-setting > div { flex: 0 0 auto; display: flex; padding: 3px; border-radius: 6px; background: #111214; }
 .capture-mode-setting button { padding: 7px 9px; border: 0; border-radius: 4px; background: transparent; color: #777b84; font-size: .6rem; cursor: pointer; }
 .capture-mode-setting button.active { background: #5865f2; color: white; }

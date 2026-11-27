@@ -24,6 +24,13 @@ segura e adiciona apenas as capacidades nativas que o navegador não oferece.
   do Electron e as transforma numa faixa de canvas de até 10 fps. Esse caminho
   prioriza funcionar, não fluidez; o auxiliar nativo ainda leva o áudio do
   computador. O modo pode ser trocado em Configurações → Windows.
+- O modo Compatível nunca volta sozinho para o Desempenho, porque uma troca
+  automática poderia quebrar a live de quem só funciona no Compatível. O
+  `capture-mode.json` guarda junto a versão do Windows, os drivers de vídeo e a
+  versão do Chromium (`electron/capture-mode.cjs`). Se algum deles mudar, o aviso
+  da transmissão e as Configurações sugerem testar o Desempenho de novo. Toda
+  transmissão no Compatível também lembra que compartilhar uma janela não tem o
+  limite de 10 fps.
 - O áudio do computador é incluído por padrão usando loopback do Electron. Se o
   Windows recusar o loopback ("Could not start audio source"), a tela é
   compartilhada sem áudio e o usuário recebe um aviso.

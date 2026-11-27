@@ -24,6 +24,16 @@ export type ScreenShareOptions = {
 };
 
 /**
+ * Compatible mode never switches back by itself, so every share in it says how
+ * to get normal fps, and points harder at the normal mode after an update.
+ */
+export function compatibleModeHint(system: DesktopSystemInfo | null) {
+  return system?.captureEnvironmentUpdated
+    ? "O Windows, o driver de vídeo ou o KCord foram atualizados desde que esse modo foi ligado: teste o modo Desempenho em Configurações → Windows."
+    : "Para fps normal, compartilhe a janela do jogo ou teste o modo Desempenho em Configurações → Windows.";
+}
+
+/**
  * Sharing the member's own screen or window: the desktop source picker and its
  * options, capture (with app-only audio and the compatible fallback), the
  * thumbnail announced to the room, and sending the stream to each member who
@@ -259,9 +269,9 @@ export function useScreenShare(options: ScreenShareOptions) {
       videoTrack?.addEventListener("ended", stopSharing, { once: true });
       startThumbnailPublishing(stream);
       setNotice(compatibleCapture
-        ? appAudioRef.current
+        ? `${appAudioRef.current
           ? `Tela compartilhada no modo compatível a até ${captureFps} fps, com áudio do computador.`
-          : `Tela compartilhada no modo compatível a até ${captureFps} fps${audioFallback ? ", sem áudio" : ""}.`
+          : `Tela compartilhada no modo compatível a até ${captureFps} fps${audioFallback ? ", sem áudio" : ""}.`} ${compatibleModeHint(systemInfo)}`
         : audioFallback
         ? "Tela compartilhada sem áudio: o Windows não liberou o som do sistema. Verifique se há um dispositivo de saída de áudio ativo."
         : appAudioRef.current

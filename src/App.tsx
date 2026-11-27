@@ -134,6 +134,7 @@ export default function App() {
   const [settingsTab, setSettingsTab] = useState<"voice" | "windows">("voice");
   const [autoStart, setAutoStart] = useState<{ supported: boolean; enabled: boolean } | null>(null);
   const [desktopCaptureMode, setDesktopCaptureMode] = useState<"wgc" | "legacy" | null>(null);
+  const [captureEnvironmentUpdated, setCaptureEnvironmentUpdated] = useState(false);
   const [audioSettingsError, setAudioSettingsError] = useState("");
   const {
     testingMicrophone,
@@ -738,7 +739,10 @@ export default function App() {
     setSettingsTab("voice");
     setAudioSettingsError("");
     void window.kafcordDesktop?.getAutoStart?.().then(setAutoStart).catch(() => setAutoStart(null));
-    void desktopSystemInfo().then((info) => setDesktopCaptureMode(info?.screenCaptureMode ?? null));
+    void desktopSystemInfo().then((info) => {
+      setDesktopCaptureMode(info?.screenCaptureMode ?? null);
+      setCaptureEnvironmentUpdated(Boolean(info?.captureEnvironmentUpdated));
+    });
     try {
       const knownDevices = await navigator.mediaDevices.enumerateDevices();
       if (!knownDevices.some((device) => device.kind === "audioinput" && device.label)) {
@@ -2781,7 +2785,11 @@ export default function App() {
                       }} /><i /></span>
                     </label>
                     {desktopCaptureMode && <div className="capture-mode-setting">
-                      <span><strong>Captura de tela inteira</strong><small>Desempenho usa WGC. Compatível envia quadros por um caminho independente quando o Windows recusa a captura normal.</small></span>
+                      <span>
+                        <strong>Captura de tela inteira</strong>
+                        <small>Desempenho usa WGC. Compatível envia quadros por um caminho independente quando o Windows recusa a captura normal, limitado a 10 fps. Compartilhar uma janela não tem esse limite.</small>
+                        {desktopCaptureMode === "legacy" && captureEnvironmentUpdated && <small className="capture-mode-hint">O Windows, o driver de vídeo ou o KCord foram atualizados desde que o modo Compatível foi ligado. Vale testar o Desempenho de novo: se falhar, o KCord oferece voltar.</small>}
+                      </span>
                       <div role="group" aria-label="Modo de captura de tela">
                         <button type="button" className={desktopCaptureMode === "wgc" ? "active" : ""} onClick={() => void changeDesktopCaptureMode("wgc")}>Desempenho</button>
                         <button type="button" className={desktopCaptureMode === "legacy" ? "active" : ""} onClick={() => void changeDesktopCaptureMode("legacy")}>Compatível</button>

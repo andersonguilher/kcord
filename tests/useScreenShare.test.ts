@@ -350,6 +350,16 @@ describe("sharing from the desktop app", () => {
     expect(mocks.startCompatibleScreenCapture.mock.calls[0].slice(1)).toEqual(["screen:0:0", 1280, 720, 10]);
     expect(displayMedia).not.toHaveBeenCalled();
     expect(setNotice).toHaveBeenLastCalledWith(expect.stringContaining("modo compatível a até 10 fps"));
+    expect(setNotice).toHaveBeenLastCalledWith(expect.stringContaining("compartilhe a janela do jogo ou teste o modo Desempenho"));
+  });
+
+  it("points at the normal mode when the PC changed since compatible mode was chosen", async () => {
+    bridge({ captureShareSnapshot: vi.fn() });
+    mocks.desktopSystemInfo.mockResolvedValue({ screenCaptureMode: "legacy", captureEnvironmentUpdated: true });
+    mocks.startCompatibleScreenCapture.mockResolvedValue(new FakeStream([new FakeTrack("video")]));
+    const { result } = mount();
+    await act(async () => result.current.startScreenShare("screen:0:0"));
+    expect(setNotice).toHaveBeenLastCalledWith(expect.stringContaining("foram atualizados desde que esse modo foi ligado"));
   });
 
   it("offers compatible mode and remembers the room when Windows cannot start a screen capture", async () => {
