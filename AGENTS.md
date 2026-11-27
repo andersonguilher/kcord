@@ -30,6 +30,15 @@ coturn relay with short-lived REST credentials for restrictive networks. See
 - `docs/ARCHITECTURE.md`: system flow, limits, and production direction.
 - `docs/DISCORD_IMPORT.md`: supported migration sources, mapping, and safety rules.
 
+## Workflow rules
+
+- Read `docs/WORKFLOW.md` before changing files or running a session routine (plan
+  the day, resume work, close the day).
+- Never work directly on `main`. Before changing files, switch to an up-to-date task
+  branch (`feat/` or `fix/`), one per task.
+- Do not stage, commit, push, open or merge pull requests, publish, or deploy unless
+  the user explicitly asks. Never use `git push --force`.
+
 ## Implementation rules
 
 - Keep shared event names and payload shapes aligned across client, server, and
