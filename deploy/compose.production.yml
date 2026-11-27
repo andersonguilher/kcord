@@ -1,6 +1,6 @@
 services:
   kafcord:
-    image: kafcord:0.1.20-20261127.63
+    image: kafcord:0.1.20-20261127.64
     build:
       context: ..
       dockerfile: Dockerfile
