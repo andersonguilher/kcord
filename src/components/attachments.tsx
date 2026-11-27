@@ -1,18 +1,7 @@
 import type { FileAttachment } from "../types";
+import { IMAGE_ATTACHMENT_PATTERN, sniffImageType } from "../../shared/channel-rules";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-
-export const IMAGE_ATTACHMENT_PATTERN = /\.(png|jpe?g|gif|webp)$/i;
-
-// Detects the real image type from the first bytes; never trusts the file name alone.
-export function sniffImageType(bytes: Uint8Array): string | null {
-  const starts = (...signature: number[]) => signature.every((byte, index) => bytes[index] === byte);
-  if (starts(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)) return "image/png";
-  if (starts(0xff, 0xd8, 0xff)) return "image/jpeg";
-  if (starts(0x47, 0x49, 0x46, 0x38)) return "image/gif";
-  if (starts(0x52, 0x49, 0x46, 0x46) && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) return "image/webp";
-  return null;
-}
 
 // Uploads are served as downloads, so image previews are fetched, verified, and shown from a blob URL.
 export function useAttachmentPreviewUrl(file: FileAttachment) {

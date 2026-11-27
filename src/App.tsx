@@ -2,7 +2,7 @@ import kcordAppIcon from "../build/icon-v2.png";
 import kafcordLogo from "../logo.png";
 import connectToChannelSound from "./assets/sounds/connect_to_channel.wav";
 import disconnectFromChannelSound from "./assets/sounds/disconnect_from_channel.wav";
-import { AttachmentImagePreview, IMAGE_ATTACHMENT_PATTERN } from "./components/attachments";
+import { AttachmentImagePreview } from "./components/attachments";
 import { LinkCard, MessageText, ScreenshotCard } from "./components/cards";
 import { CallIcon, NoticeToast, ParticipantTile, StreamVideo, UserAvatar } from "./components/common";
 import { FLAT_VOICE_EQ, RemoteAudio, VOICE_EQ_BANDS, VOICE_EQ_PRESETS } from "./components/voiceAudio";
@@ -22,7 +22,8 @@ import { usePeerConnections } from "./hooks/usePeerConnections";
 import { usePushToTalk } from "./hooks/usePushToTalk";
 import { clientReportLabels, clientReportStatusLabels, clientReportSystem, desktopSystemInfo, reportClientIssue, reportPageError } from "./lib/clientReports";
 import { isAppleMobile, isStandaloneApp, } from "./lib/device";
-import { fileIsExpired, firstMessageUrl, formatFileExpiry, formatSize, formatTime, formatTraffic, isLinksChannel, isScreenshotChannel, keyLabel, memberVolumeKey } from "./lib/format";
+import { fileIsExpired, formatFileExpiry, formatSize, formatTime, formatTraffic, keyLabel, memberVolumeKey } from "./lib/format";
+import { IMAGE_ATTACHMENT_PATTERN, firstMessageUrl, isLinksChannel, isScreenshotChannel } from "../shared/channel-rules";
 import { blockedAudioListeners, resumeBlockedRemoteAudio, resumePausedRemoteAudio } from "./lib/remoteAudio";
 import { LOGIN_HANDOFF_KEY, defaultCommunity, discordLoginFailureMessages, forgetStoredLoginHandoff, installDesktopUpdate, loadedClientBuild, readStoredLoginHandoff, reloadForClientBuild, saveVoiceResume, storedLocalGuestProfile, updateVoiceResumeChannelId } from "./lib/session";
 import { useFittedTileWidth } from "./lib/tiles";
@@ -240,6 +241,7 @@ export default function App() {
     fileInputRef,
     directFileInputRef,
     activeChannel,
+    activeChannelName: community.textChannels.find((channel) => channel.id === activeChannel)?.name ?? "",
     authorName: name,
     getAvatarUrl: () => (localGuestMode ? undefined : currentAvatarUrl),
     setNotice,
@@ -2229,7 +2231,7 @@ export default function App() {
                     </div>
                     <div className="message-actions" aria-label={`Ações da mensagem de ${message.author}`}>
                       {["👍", "❤️", "😂", "🎉", "👀", "👎"].map((emoji) => <button key={emoji} type="button" title={`Reagir com ${emoji}`} onClick={() => toggleMessageReaction(message.id, emoji)}>{emoji}</button>)}
-                      <button type="button" title="Responder" aria-label="Responder" onClick={() => startReplyingToMessage(message)}>↩</button>
+                      {!screenshotChannelActive && <button type="button" title="Responder" aria-label="Responder" onClick={() => startReplyingToMessage(message)}>↩</button>}
                       {ownsMessage && !message.file && <button type="button" title="Editar" aria-label="Editar" onClick={() => startEditingMessage(message)}>✎</button>}
                       {authState?.canManageMessages && <button type="button" title={message.pinned ? "Desafixar" : "Fixar"} aria-label={message.pinned ? "Desafixar mensagem" : "Fixar mensagem"} onClick={() => toggleMessagePin(message)}>⌖</button>}
                       {canDeleteMessage && <button type="button" className="danger" title="Excluir" aria-label="Excluir mensagem" onClick={() => deleteMessage(message)}>×</button>}
@@ -2244,11 +2246,11 @@ export default function App() {
               <button type="button" onClick={() => setReplyingTo(null)} aria-label="Cancelar resposta">×</button>
             </div>}
             <form className="composer" onSubmit={sendMessage}>
-              <input ref={fileInputRef} type="file" hidden onChange={(event) => void uploadFile(event.target.files?.[0])} />
-              <button type="button" className="attach-button" onClick={() => fileInputRef.current?.click()} aria-label="Enviar arquivo, máximo 10 MB e disponível por 3 dias" title="Enviar arquivo · máximo 10 MB · disponível por 3 dias" disabled={uploading}>
+              <input ref={fileInputRef} type="file" hidden accept={screenshotChannelActive ? ".png,.jpg,.jpeg,.gif,.webp" : undefined} onChange={(event) => void uploadFile(event.target.files?.[0])} />
+              <button type="button" className="attach-button" onClick={() => fileInputRef.current?.click()} aria-label="Enviar arquivo, máximo 10 MB e disponível por 3 dias" title={linksChannelActive ? "Este canal aceita apenas links" : "Enviar arquivo · máximo 10 MB · disponível por 3 dias"} disabled={uploading || linksChannelActive}>
                 {uploading ? "…" : <><CallIcon kind="attach" /><small>Arquivo</small></>}
               </button>
-              <input value={messageDraft} onChange={(event) => setMessageDraft(event.target.value)} onPaste={(event) => pasteFile(event)} placeholder={`Mensagem em #${activeChannelData.name}`} maxLength={2000} />
+              <input value={messageDraft} onChange={(event) => setMessageDraft(event.target.value)} onPaste={(event) => pasteFile(event)} placeholder={screenshotChannelActive ? `Cole um print (Ctrl+V) em #${activeChannelData.name}` : linksChannelActive ? `Cole um link em #${activeChannelData.name}` : `Mensagem em #${activeChannelData.name}`} maxLength={2000} />
               <button type="submit" className="send-button" aria-label="Enviar mensagem"><CallIcon kind="send" /><span>Enviar</span></button>
             </form>
           </>

@@ -81,24 +81,6 @@ export function formatShareDiagnosis(diagnosis: DesktopShareDiagnosis) {
   return lines.join("\n");
 }
 
-// Channels named like "links" show messages as a grid of link cards.
-export function isLinksChannel(name: string) {
-  return name.normalize("NFD").toLowerCase().split(/[^a-z0-9]+/).some((word) => word.startsWith("link"));
-}
-
-// Screenshot/capture channels show image attachments as the same gallery cards used by links.
-export function isScreenshotChannel(name: string) {
-  return name.normalize("NFD").toLowerCase().split(/[^a-z0-9]+/)
-    .some((word) => word.startsWith("screenshot") || word.startsWith("captura"));
-}
-
-// First URL in a message, without trailing punctuation that is usually prose.
-export function firstMessageUrl(text: string) {
-  const match = /https?:\/\/[^\s<>"]+/i.exec(text);
-  if (!match) return null;
-  return match[0].replace(/[).,;:!?\]}'"]+$/, "");
-}
-
 export function linkHostname(url: string) {
   try {
     return new URL(url).hostname.replace(/^www\./, "");

@@ -8,6 +8,7 @@ import { io as connect, type Socket as ClientSocket } from "socket.io-client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ChatStore } from "../server/chat-store.ts";
 import { registerChatHandlers } from "../server/chat-handlers.ts";
+import { LINKS_CHANNEL_ERROR, SCREENSHOT_CHANNEL_ERROR } from "../shared/channel-rules.ts";
 import type { Member } from "../server/types.ts";
 
 const communityRoom = "community:test";
@@ -17,6 +18,8 @@ const community = {
   textChannels: [
     { id: "geral", name: "geral", description: "", categoryId: null, position: 0 },
     { id: "outro", name: "outro", description: "", categoryId: null, position: 1 },
+    { id: "links", name: "🔗links", description: "", categoryId: null, position: 2 },
+    { id: "prints", name: "📷screenshot", description: "", categoryId: null, position: 3 },
   ],
   voiceChannels: [],
   roles: [],
@@ -148,6 +151,23 @@ describe("channel chat", () => {
     ana.emit("chat:send", { channelId: "inexistente", text: "oi" });
     expect((await received).channelId).toBe("geral");
     expect(store.listPublicMessages()).toHaveLength(1);
+  });
+
+  it("accepts only links in the links channel, when sending and editing", async () => {
+    const ana = await connectAs("user-1", "Ana");
+    expect(await ask(ana, "chat:send", { channelId: "links", text: "sem endereço" })).toMatchObject({ ok: false, error: LINKS_CHANNEL_ERROR });
+    expect(store.listPublicMessages()).toHaveLength(0);
+    const sent = nextEvent<{ id: string }>(ana, "chat:message");
+    ana.emit("chat:send", { channelId: "links", text: "veja https://example.com" });
+    const { id } = await sent;
+    expect((await ask(ana, "chat:edit", { messageId: id, text: "sem link" })).ok).toBe(false);
+    expect(store.getPublicMessage(id)?.text).toBe("veja https://example.com");
+  });
+
+  it("refuses text messages in the screenshot channel", async () => {
+    const ana = await connectAs("user-1", "Ana");
+    expect(await ask(ana, "chat:send", { channelId: "prints", text: "https://example.com" })).toMatchObject({ ok: false, error: SCREENSHOT_CHANNEL_ERROR });
+    expect(store.listPublicMessages()).toHaveLength(0);
   });
 
   it("only links a reply to a message in the same channel", async () => {

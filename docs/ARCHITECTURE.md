@@ -52,6 +52,13 @@ service when NAT or firewall restrictions prevent a direct connection.
    in the same responsive card grid as link previews. The card reuses the
    verified attachment blob, opens the existing lightbox, and keeps the original
    download available. Expired and non-image files remain ordinary message rows.
+10. `shared/channel-rules.ts` limits what those channels accept, in the client and
+    again on the server: link channels take only text containing an http(s) URL
+    (no files); screenshot channels take only image files, checked by name and by
+    leading bytes (no text messages). Private messages are not affected. For
+    messages stored before the rule, `node scripts/move-channel-messages.ts` lists
+    misplaced links and images between those two channels, and `--apply` backs up
+    the database and moves them. Other content stays where it is.
 
 ## Security boundary
 

@@ -14,8 +14,9 @@ import { createTrafficTracker, emptyTrafficDay } from "./traffic.ts";
 import { registerChatHandlers } from "./chat-handlers.ts";
 import { createVoiceRegistry, registerVoiceHandlers } from "./voice-handlers.ts";
 import { parsePayload, profileSyncSchema, sessionJoinSchema } from "../shared/protocol.ts";
+import { SCREENSHOT_CHANNEL_ERROR, channelFileError, firstMessageUrl, isLinksChannel, isScreenshotChannel } from "../shared/channel-rules.ts";
 import type { Member } from "./types.ts";
-import { createFileStorage } from "./files.ts";
+import { createFileStorage, isImageUpload } from "./files.ts";
 import { readLiveKitConfig } from "./livekit.ts";
 import { createLiveKitRouter } from "./livekit-routes.ts";
 import { createDownloadsRouter } from "./downloads.ts";
@@ -72,19 +73,10 @@ const defaultCommunity: CommunityConfig = {
   roles: [],
 };
 
-function isLinksChannelName(name: string) {
-  return name.normalize("NFD").toLowerCase().split(/[^a-z0-9]+/).some((word) => word.startsWith("link"));
-}
-
-function firstMessageUrl(text: string) {
-  const match = /https?:\/\/[^\s<>"]+/i.exec(text);
-  return match?.[0].replace(/[).,;:!?\]}'"]+$/, "") ?? null;
-}
-
 function warmChannelLinkPreview(channelId: string, text: string, userId?: string) {
   if (!userId) return;
   const channel = community.textChannels.find((candidate) => candidate.id === channelId);
-  const url = channel && isLinksChannelName(channel.name) ? firstMessageUrl(text) : null;
+  const url = channel && isLinksChannel(channel.name) ? firstMessageUrl(text) : null;
   if (!url) return;
   void warmLinkPreview(url, userId).catch((error) => {
     console.warn("Não foi possível aquecer uma prévia do canal de links.", error);
@@ -501,6 +493,14 @@ app.post("/api/files", (request, response) => {
         }
       }
       response.status(201).json({ file: directMessage.file, message: directMessage });
+      return;
+    }
+    const channelName = community.textChannels.find((channel) => channel.id === channelId)?.name ?? "";
+    const channelError = channelFileError(channelName, request.file.originalname.slice(0, 160))
+      ?? (isScreenshotChannel(channelName) && !isImageUpload(request.file.path) ? SCREENSHOT_CHANNEL_ERROR : null);
+    if (channelError) {
+      deleteStoredUpload(fileUrl);
+      response.status(415).json({ error: channelError });
       return;
     }
     const message: ChatMessage = {

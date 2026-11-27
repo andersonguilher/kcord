@@ -14,6 +14,7 @@ import {
   parsePayload,
   type ChatAck,
 } from "../shared/protocol.ts";
+import { channelTextError } from "../shared/channel-rules.ts";
 import type { ChatMessage, ChatStore, DirectMessage } from "./chat-store.ts";
 import { canManageMessages } from "./discord-integration.ts";
 import type { CommunityConfig } from "./discord-template.ts";
@@ -56,16 +57,21 @@ export function registerChatHandlers(socket: Socket, dependencies: ChatHandlerDe
     directConversationFor,
   } = dependencies;
 
-  socket.on("chat:send", (payload: unknown) => {
+  socket.on("chat:send", (payload: unknown, acknowledge?: (result: ChatAck) => void) => {
     const { channelId, text: cleanText, avatarUrl, replyToId } = parsePayload(chatSendSchema, payload);
     const member = members.get(socket.id);
     if (!member || !cleanText) return;
     member.lastActiveAt = Date.now();
     if (syncAuthenticatedMemberAvatar(member, avatarUrl)) broadcastMembers();
 
-    const validChannelId = getCommunity().textChannels.some((channel) => channel.id === channelId)
-      ? channelId
-      : getCommunity().textChannels[0].id;
+    const channel = getCommunity().textChannels.find((candidate) => candidate.id === channelId)
+      ?? getCommunity().textChannels[0];
+    const validChannelId = channel.id;
+    const channelError = channelTextError(channel.name, cleanText);
+    if (channelError) {
+      acknowledge?.({ ok: false, error: channelError });
+      return;
+    }
     const storedReplyTarget = chatStore.getPublicMessage(replyToId);
     const replyTarget = storedReplyTarget?.channelId === validChannelId ? storedReplyTarget : undefined;
     const message: ChatMessage = {
@@ -98,6 +104,12 @@ export function registerChatHandlers(socket: Socket, dependencies: ChatHandlerDe
     }
     if (!cleanText || message.file) {
       acknowledge?.({ ok: false, error: "Essa mensagem não pode ser editada." });
+      return;
+    }
+    const channelName = getCommunity().textChannels.find((channel) => channel.id === message.channelId)?.name ?? "";
+    const channelError = channelTextError(channelName, cleanText);
+    if (channelError) {
+      acknowledge?.({ ok: false, error: channelError });
       return;
     }
     const editedAt = new Date().toISOString();

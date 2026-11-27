@@ -1,6 +1,7 @@
-import { existsSync, readdirSync, statSync, unlinkSync } from "node:fs";
+import { closeSync, existsSync, openSync, readSync, readdirSync, statSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import express from "express";
+import { sniffImageType } from "../shared/channel-rules.ts";
 import type { ChatStore } from "./chat-store.ts";
 import { getDiscordSocketIdentity, kafcordUserIdsForDiscordUser } from "./discord-integration.ts";
 
@@ -11,6 +12,18 @@ type FileStorageOptions = {
   retentionMs: number;
   cleanupIntervalMs: number;
 };
+
+/** Whether a received upload starts with the signature of a supported image. */
+export function isImageUpload(filePath: string) {
+  const head = Buffer.alloc(12);
+  const descriptor = openSync(filePath, "r");
+  try {
+    const length = readSync(descriptor, head, 0, head.length, 0);
+    return sniffImageType(head.subarray(0, length)) !== null;
+  } finally {
+    closeSync(descriptor);
+  }
+}
 
 /**
  * Serves stored attachments (forced download, nosniff, private-conversation
